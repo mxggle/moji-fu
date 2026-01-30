@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Style Copier</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="popup">
+    <header class="header">
+      <div class="header-top">
+        <h1>Moji-fu</h1>
+        <button id="auto-collect-btn" class="btn btn-collect" title="Auto-collect article styles from this page">📄
+          Collect</button>
+      </div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="styles">Collected</button>
+        <button class="tab" data-tab="applied">Applied</button>
+      </nav>
+    </header>
+
+    <main class="main">
+      <!-- Saved Styles Tab -->
+      <div id="styles-tab" class="tab-content active">
+        <div id="empty-state" class="empty-state">
+          <p>No collected styles yet.</p>
+          <p class="hint">Click "Collect" button or select text on any page to capture styles.</p>
+        </div>
+        <ul id="style-list" class="style-list"></ul>
+      </div>
+
+      <!-- Applied Styles Tab -->
+      <div id="applied-tab" class="tab-content">
+        <div id="applied-empty" class="empty-state">
+          <p>No styles applied to this page.</p>
+        </div>
+        <ul id="applied-list" class="style-list"></ul>
+      </div>
+    </main>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Edit Style</h2>
+        <button class="close-btn" id="close-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="preview-section">
+          <label>Preview</label>
+          <div id="edit-preview" class="preview-text">Sample Text</div>
+        </div>
+        <div class="properties-section">
+          <label>Properties</label>
+          <ul id="property-list" class="property-list"></ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="save-changes" class="btn btn-primary">Save</button>
+        <button id="cancel-edit" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>

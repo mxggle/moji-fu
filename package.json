@@ -1,0 +1,12 @@
+{
+    "name": "style-copier",
+    "version": "1.0.0",
+    "description": "Chrome extension to capture, save, and apply text styles",
+    "scripts": {
+        "dev": "node dev-server.js"
+    },
+    "devDependencies": {
+        "chokidar": "^3.5.3",
+        "ws": "^8.14.2"
+    }
+}
