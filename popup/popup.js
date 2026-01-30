@@ -19,16 +19,16 @@
 
     // CSS property mapping for inline styles
     const CSS_PROPS = {
-        fontFamily: 'fontFamily',
-        fontSize: 'fontSize',
-        fontWeight: 'fontWeight',
-        fontStyle: 'fontStyle',
+        fontFamily: 'font-family',
+        fontSize: 'font-size',
+        fontWeight: 'font-weight',
+        fontStyle: 'font-style',
         color: 'color',
-        lineHeight: 'lineHeight',
-        letterSpacing: 'letterSpacing',
-        textDecoration: 'textDecoration',
-        textTransform: 'textTransform',
-        textShadow: 'textShadow'
+        lineHeight: 'line-height',
+        letterSpacing: 'letter-spacing',
+        textDecoration: 'text-decoration',
+        textTransform: 'text-transform',
+        textShadow: 'text-shadow'
     };
 
     let savedStyles = [];
@@ -96,6 +96,72 @@
         });
     }
 
+    // Inject font resources into the popup for previews
+    function injectFontResourcesForPreview(fontResources) {
+        if (!fontResources) return;
+
+        // For article styles, fontResources is an object with keys being tag names
+        const isArticleStyle = typeof fontResources === 'object' &&
+            Object.keys(fontResources).some(key => ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P'].includes(key));
+
+        let allGoogleFontsLinks = [];
+        let allFontFaceRules = [];
+
+        if (isArticleStyle) {
+            // Article style - collect from all element types
+            Object.values(fontResources).forEach(resources => {
+                if (resources && resources.googleFontsLinks) {
+                    allGoogleFontsLinks.push(...resources.googleFontsLinks);
+                }
+                if (resources && resources.fontFaceRules) {
+                    allFontFaceRules.push(...resources.fontFaceRules);
+                }
+            });
+        } else {
+            // Single style - use directly
+            if (fontResources.googleFontsLinks) {
+                allGoogleFontsLinks = fontResources.googleFontsLinks;
+            }
+            if (fontResources.fontFaceRules) {
+                allFontFaceRules = fontResources.fontFaceRules;
+            }
+        }
+
+        // Remove duplicates
+        allGoogleFontsLinks = [...new Set(allGoogleFontsLinks)];
+        allFontFaceRules = [...new Set(allFontFaceRules)];
+
+        // Inject Google Fonts links
+        allGoogleFontsLinks.forEach(href => {
+            const linkId = 'style-copier-font-' + btoa(href).replace(/=/g, '').substring(0, 20);
+            if (!document.getElementById(linkId)) {
+                const link = document.createElement('link');
+                link.id = linkId;
+                link.rel = 'stylesheet';
+                link.href = href;
+                document.head.appendChild(link);
+            }
+        });
+
+        // Inject @font-face rules
+        if (allFontFaceRules.length > 0) {
+            let fontFaceStyleEl = document.getElementById('style-copier-popup-fonts');
+            if (!fontFaceStyleEl) {
+                fontFaceStyleEl = document.createElement('style');
+                fontFaceStyleEl.id = 'style-copier-popup-fonts';
+                document.head.appendChild(fontFaceStyleEl);
+            }
+
+            // Append new font-face rules (avoiding duplicates)
+            const existingRules = fontFaceStyleEl.textContent;
+            allFontFaceRules.forEach(rule => {
+                if (!existingRules.includes(rule)) {
+                    fontFaceStyleEl.textContent += '\n' + rule;
+                }
+            });
+        }
+    }
+
     // Render the style list
     function renderStyleList() {
         if (savedStyles.length === 0) {
@@ -106,6 +172,11 @@
 
         emptyState.style.display = 'none';
         styleList.innerHTML = savedStyles.map(style => {
+            // Inject font resources so preview shows correct fonts
+            if (style.fontResources) {
+                injectFontResourcesForPreview(style.fontResources);
+            }
+
             const isArticle = style.type === 'article';
             const typeBadge = isArticle
                 ? '<span class="type-badge article-badge">Article</span>'
@@ -192,7 +263,9 @@
         }
 
         appliedEmpty.style.display = 'none';
-        appliedList.innerHTML = appliedRules.map(rule => `
+        // Reverse to show most recent on top (since we use unshift when adding)
+        const displayRules = [...appliedRules].reverse();
+        appliedList.innerHTML = displayRules.map(rule => `
       <li class="style-item applied-item" data-id="${rule.id}">
         <div class="style-header">
           <span class="style-name">${escapeHtml(rule.styleName)}</span>
@@ -432,6 +505,30 @@
     closeModalBtn.addEventListener('click', closeModal);
     cancelEditBtn.addEventListener('click', closeModal);
     saveChangesBtn.addEventListener('click', saveEdit);
+
+    // Selection-based collect button
+    const selectionCollectBtn = document.getElementById('selection-collect-btn');
+    if (selectionCollectBtn) {
+        selectionCollectBtn.addEventListener('click', () => {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs[0]) {
+                    chrome.tabs.sendMessage(tabs[0].id, { type: 'ENABLE_SELECTION_MODE' }, (response) => {
+                        if (chrome.runtime.lastError) {
+                            // Show error state briefly
+                            selectionCollectBtn.textContent = '❌ Failed';
+                            setTimeout(() => {
+                                selectionCollectBtn.textContent = '✨ Select Text';
+                            }, 1500);
+                            return;
+                        }
+
+                        // Close popup to let user select text
+                        window.close();
+                    });
+                }
+            });
+        });
+    }
 
     // Auto-collect button
     const autoCollectBtn = document.getElementById('auto-collect-btn');

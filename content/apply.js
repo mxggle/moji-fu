@@ -123,6 +123,215 @@
         return rules.join('\n');
     }
 
+    // Generate @font-face rule from loaded font data
+    function generateFontFaceRule(fontData, sourceUrl) {
+        const src = sourceUrl.startsWith('data:')
+            ? `url("${sourceUrl}")`
+            : `url("${sourceUrl}")`;
+
+        return `@font-face {
+            font-family: "${fontData.family}";
+            font-weight: ${fontData.weight};
+            font-style: ${fontData.style};
+            font-stretch: ${fontData.stretch || 'normal'};
+            src: ${src};
+            ${fontData.unicodeRange ? `unicode-range: ${fontData.unicodeRange};` : ''}
+        }`;
+    }
+
+    function hasFontFaceRule(existingRules, fontData) {
+        const familyNeedle = `font-family: "${fontData.family}"`;
+        const weightNeedle = `font-weight: ${fontData.weight}`;
+        const styleNeedle = `font-style: ${fontData.style}`;
+        return existingRules.includes(familyNeedle) &&
+            existingRules.includes(weightNeedle) &&
+            existingRules.includes(styleNeedle);
+    }
+
+    function buildFontFaceRulesFromDescriptors(descriptors, capturedFonts, existingRulesText) {
+        const rules = [];
+        const capturedByUrl = new Map();
+        const seen = new Set();
+
+        capturedFonts.forEach(font => {
+            if (font.dataUrl) {
+                capturedByUrl.set(font.url, font.dataUrl);
+            }
+        });
+
+        descriptors.forEach(descriptor => {
+            if (!descriptor || !descriptor.family) return;
+            const sources = descriptor.sources || [];
+            if (sources.length === 0) return;
+
+            let sourceUrl = sources[0];
+            for (const source of sources) {
+                if (capturedByUrl.has(source)) {
+                    sourceUrl = capturedByUrl.get(source);
+                    break;
+                }
+            }
+
+            const fontData = {
+                family: descriptor.family,
+                weight: descriptor.weight || 'normal',
+                style: descriptor.style || 'normal',
+                stretch: descriptor.stretch || 'normal',
+                unicodeRange: descriptor.unicodeRange || 'U+0-10FFFF'
+            };
+
+            const key = `${fontData.family}|${fontData.weight}|${fontData.style}|${sourceUrl}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+
+            if (!hasFontFaceRule(existingRulesText + rules.join('\n'), fontData)) {
+                rules.push(generateFontFaceRule(fontData, sourceUrl));
+            }
+        });
+
+        return rules;
+    }
+
+    // Inject font resources (Google Fonts links and @font-face rules)
+    // Enhanced to handle captured font data and Font Loading API metadata
+    function injectFontResources(fontResources) {
+        if (!fontResources) return;
+
+        // For article styles, fontResources is an object with keys being tag names
+        const isArticleStyle = typeof fontResources === 'object' &&
+            Object.keys(fontResources).some(key => ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P'].includes(key));
+
+        let allGoogleFontsLinks = [];
+        let allFontFaceRules = [];
+        let allFontFaceEntries = [];
+        let allLoadedFonts = [];
+        let allCapturedFonts = [];
+        let allFontUrls = [];
+
+        if (isArticleStyle) {
+            // Article style - collect from all element types
+            Object.values(fontResources).forEach(resources => {
+                if (resources && resources.googleFontsLinks) {
+                    allGoogleFontsLinks.push(...resources.googleFontsLinks);
+                }
+                if (resources && resources.fontFaceRules) {
+                    allFontFaceRules.push(...resources.fontFaceRules);
+                }
+                if (resources && resources.fontFaceEntries) {
+                    allFontFaceEntries.push(...resources.fontFaceEntries);
+                }
+                if (resources && resources.loadedFonts) {
+                    allLoadedFonts.push(...resources.loadedFonts);
+                }
+                if (resources && resources.capturedFonts) {
+                    allCapturedFonts.push(...resources.capturedFonts);
+                }
+                if (resources && resources.fontUrls) {
+                    allFontUrls.push(...resources.fontUrls);
+                }
+            });
+        } else {
+            // Single style - use directly
+            if (fontResources.googleFontsLinks) {
+                allGoogleFontsLinks = fontResources.googleFontsLinks;
+            }
+            if (fontResources.fontFaceRules) {
+                allFontFaceRules = fontResources.fontFaceRules;
+            }
+            if (fontResources.fontFaceEntries) {
+                allFontFaceEntries = fontResources.fontFaceEntries;
+            }
+            if (fontResources.loadedFonts) {
+                allLoadedFonts = fontResources.loadedFonts;
+            }
+            if (fontResources.capturedFonts) {
+                allCapturedFonts = fontResources.capturedFonts;
+            }
+            if (fontResources.fontUrls) {
+                allFontUrls = fontResources.fontUrls;
+            }
+        }
+
+        // Remove duplicates
+        allGoogleFontsLinks = [...new Set(allGoogleFontsLinks)];
+        allFontFaceRules = [...new Set(allFontFaceRules)];
+        allFontUrls = [...new Set(allFontUrls)];
+
+        // Inject Google Fonts links
+        allGoogleFontsLinks.forEach(href => {
+            const linkId = 'style-copier-font-' + btoa(href).replace(/=/g, '').substring(0, 20);
+            if (!document.getElementById(linkId)) {
+                const link = document.createElement('link');
+                link.id = linkId;
+                link.rel = 'stylesheet';
+                link.href = href;
+                document.head.appendChild(link);
+            }
+        });
+
+        // Prepare font style element
+        let fontFaceStyleEl = document.getElementById('style-copier-fonts');
+        if (!fontFaceStyleEl) {
+            fontFaceStyleEl = document.createElement('style');
+            fontFaceStyleEl.id = 'style-copier-fonts';
+            document.head.appendChild(fontFaceStyleEl);
+        }
+
+        const existingRules = fontFaceStyleEl.textContent;
+
+        // Inject existing @font-face rules (from accessible stylesheets)
+        allFontFaceRules.forEach(rule => {
+            if (!existingRules.includes(rule)) {
+                fontFaceStyleEl.textContent += '\n' + rule;
+            }
+        });
+
+        // Generate and inject @font-face rules from captured font data and descriptors
+        const descriptors = [...allFontFaceEntries, ...allLoadedFonts];
+        const generatedRules = buildFontFaceRulesFromDescriptors(
+            descriptors,
+            allCapturedFonts,
+            fontFaceStyleEl.textContent
+        );
+        if (generatedRules.length > 0) {
+            fontFaceStyleEl.textContent += '\n' + generatedRules.join('\n');
+        }
+
+        // If we still have font URLs but no other data, try to load them directly
+        // This is a last resort for cross-origin fonts
+        if (allFontUrls.length > 0 && allFontFaceRules.length === 0 && allLoadedFonts.length === 0 && allFontFaceEntries.length === 0) {
+            console.log('Style Copier: Attempting to load fonts from URLs:', allFontUrls);
+            allFontUrls.forEach(url => {
+                // Create a basic @font-face rule with the URL
+                // Note: This may not work if the font server blocks cross-origin requests
+                const fontName = extractFontNameFromUrl(url);
+                if (fontName) {
+                    const rule = `@font-face {
+                        font-family: "${fontName}";
+                        src: url("${url}");
+                    }`;
+                    if (!existingRules.includes(url)) {
+                        fontFaceStyleEl.textContent += '\n' + rule;
+                    }
+                }
+            });
+        }
+    }
+
+    // Try to extract font name from URL path
+    function extractFontNameFromUrl(url) {
+        try {
+            const pathname = new URL(url).pathname;
+            const filename = pathname.split('/').pop();
+            // Remove extension and common suffixes
+            let name = filename.replace(/\.(woff2?|ttf|otf|eot|svg)$/i, '');
+            name = name.replace(/[-_](regular|bold|italic|light|medium|semibold|thin|black|condensed)/gi, ' $1');
+            return name.trim() || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
     // Apply saved styles for current page
     function applyStoredStyles() {
         chrome.storage.local.get(['appliedRules', 'savedStyles'], (result) => {
@@ -142,10 +351,16 @@
             if (matchingRules.length === 0) return;
 
             // Build and inject stylesheet
+            // Reverse the order so the topmost (most recent) rule takes effect last
             let css = '';
-            matchingRules.forEach(rule => {
+            matchingRules.reverse().forEach(rule => {
                 const style = styles.find(s => s.id === rule.styleId);
                 if (style) {
+                    // Inject font resources for this style
+                    if (style.fontResources) {
+                        injectFontResources(style.fontResources);
+                    }
+
                     if (style.type === 'article' && style.structureStyles) {
                         // Article structure style - apply different rules per element type
                         css += buildArticleCssRules(rule.selector, style.structureStyles) + '\n';
@@ -239,8 +454,21 @@
             const rules = result.appliedRules || [];
             const styles = result.savedStyles || [];
 
-            // Add new rule
-            rules.push({
+            // Check for duplicate rule (same styleId + selector + urlPattern)
+            const isDuplicate = rules.some(rule =>
+                rule.styleId === styleId &&
+                rule.selector === selector &&
+                rule.urlPattern === urlPattern
+            );
+
+            if (isDuplicate) {
+                showToast('Style already applied to this element!');
+                if (callback) callback();
+                return;
+            }
+
+            // Add new rule at the beginning (most recent on top)
+            rules.unshift({
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2),
                 styleId: styleId,
                 urlPattern: urlPattern,
@@ -251,6 +479,11 @@
                 // Apply immediately
                 const style = styles.find(s => s.id === styleId);
                 if (style) {
+                    // Inject font resources for this style
+                    if (style.fontResources) {
+                        injectFontResources(style.fontResources);
+                    }
+
                     let styleEl = document.getElementById('style-copier-applied');
                     if (!styleEl) {
                         styleEl = document.createElement('style');

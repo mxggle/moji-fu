@@ -44,6 +44,11 @@ body {
     margin: 0;
 }
 
+.header-buttons {
+    display: flex;
+    gap: 6px;
+}
+
 .btn-collect {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #fff;
@@ -54,6 +59,11 @@ body {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-selection {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
 }
 
 .btn-collect:hover {

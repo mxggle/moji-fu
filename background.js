@@ -39,6 +39,21 @@ connectHotReload();
 
 // Message routing between popup and content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'FETCH_FONT_DATA' && message.url) {
+    fetchFontAsDataUrl(message.url)
+      .then((dataUrl) => {
+        if (dataUrl) {
+          sendResponse({ dataUrl });
+        } else {
+          sendResponse({ error: 'Font fetch failed' });
+        }
+      })
+      .catch((error) => {
+        sendResponse({ error: error?.message || 'Font fetch failed' });
+      });
+    return true;
+  }
+
   if (message.type === 'START_PICKER' || message.type === 'QUICK_APPLY') {
     // Forward to content script on active tab
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -59,6 +74,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true;
 });
+
+function isLikelyFontContentType(contentType) {
+  if (!contentType) return true;
+  const type = contentType.toLowerCase();
+  return type.includes('font') ||
+    type.includes('application/octet-stream') ||
+    type.includes('application/font') ||
+    type.includes('application/x-font');
+}
+
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function fetchFontAsDataUrl(url) {
+  const response = await fetch(url);
+  if (!response.ok) return null;
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!isLikelyFontContentType(contentType)) return null;
+
+  const buffer = await response.arrayBuffer();
+  const base64 = arrayBufferToBase64(buffer);
+  const mime = contentType || 'font/woff2';
+  return `data:${mime};base64,${base64}`;
+}
 
 // Initialize badge on install
 chrome.runtime.onInstalled.addListener(() => {

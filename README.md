@@ -4,23 +4,24 @@
 > A Chrome Extension to capture, collect, and apply font styles across the web with one click.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](#)
 
 ---
 
 ## 📖 Overview
 
-**Kaki-utsushi** (Japanese for "transcribing" or "copying by hand") is a precision tool designed for designers and developers. It allows you to "lift" the typographic identity of any webpage—capturing font families, weights, sizes, and spacing—and apply them instantly to other elements or save them for inspiration.
+**Moji-fu** (Japanese for "Character Style" or "Literary Wind") is a precision tool designed for designers and developers who appreciate the nuance of web typography. It allows you to "lift" the typographic identity of any webpage—capturing font families, weights, sizes, and spacing—and apply them instantly elsewhere.
 
-No more inspecting elements to find the perfect font. Just **Collect** and **Apply**.
+Unlike simple inspectors, **Moji-fu** doesn't just copy names; it captures the actual font files, embedding them as data URLs to ensure your collections remain perfectly styled even if the original source disappears.
 
 ## ✨ Features
 
-- **🎯 Precision Capture**: Instantly extract font-family, weight, size, line-height, and color.
-- **📄 Auto-Collect**: Automatically detects the main article content on a page and harvests its typographic DNA.
-- **Library Management**: Keep a curated list of your favorite typography styles in a sleek, Japandi-inspired popup interface.
-- **⚡ Quick Apply**: Inject collected styles into any page to preview how your content looks with premium typography.
-- **🛠 Edit Mode**: Tweak captured properties before applying them to ensure a perfect fit.
+- **🎯 Precision Capture**: Instantly extract font-family, weight, size, line-height, and color from any element.
+- **📄 Article DNA Capture**: Capture the entire typographic hierarchy of an article (H1-H6 and Paragraphs) in one click.
+- **💾 Font Embedding**: Automatically downloads font files (`.woff2`, `.ttf`, etc.) and converts them to Data URLs, making your collection offline-ready and permanent.
+- **⚡ Quick Apply**: Inject collected styles or full article structures into any page to preview how your content looks with premium typography.
+- **🎨 Japandi Interface**: A sleek, minimalist popup interface inspired by Japanese aesthetics, featuring a calm palette and smooth transitions.
+- **📊 Style Library**: Manage your collected styles with a badge indicator showing your current collection count.
 
 ## 🚀 Installation
 
@@ -31,13 +32,24 @@ No more inspecting elements to find the perfect font. Just **Collect** and **App
 
 ## 🛠 Usage
 
-1. **Collect**: Click the **Collect** button in the popup to automatically grab the article styles, or select text on a page to capture specific styles.
-2. **Preview**: View your collection in the "Collected" tab.
-3. **Apply**: Navigate to the "Applied" tab or use the context menu to apply a saved style to the current page.
+1. **Collect**: 
+   - **Selection**: Select any text on a page to see the "Collect Style" button.
+   - **Full Article**: Click the popup's "Collect Article" button (or use the floating button) to automatically harvest the hierarchy of the current page.
+2. **Library**: View your collection in the popup. Styles are ordered by most recently collected.
+3. **Apply**: 
+   - Click **Quick Apply** on any saved style to inject it into the current page.
+   - For single styles, you can pick a specific element to "paint" with the saved typography.
+4. **Edit**: Tweak captured properties in the library before applying them to ensure a perfect fit.
+
+## 📐 Technical Highlights
+
+- **Font Persistence**: Uses the Font Loading API and background fetching to bypass CORS and capture raw font data.
+- **Article Detection**: Intelligent selectors find the main content block, excluding ads and navigation for a clean capture.
+- **Zero Dependencies**: Built with vanilla JavaScript, CSS, and HTML for maximum performance and a lightweight footprint.
 
 ## 🎨 Design Philosophy
 
-Inspired by the concept of *Utsushi* (写し), the project focuses on the respectful study and reproduction of beautiful design patterns. The UI is built to be minimalist, focused, and out of your way.
+Inspired by the concept of *Utsushi* (写し), the project focuses on the respectful study and reproduction of beautiful design patterns. The UI is built to be minimalist, focused, and out of your way—embodying the Zen principle of *Ma* (negative space).
 
 ## 📜 License
 

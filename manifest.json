@@ -1,11 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Moji-fu (文字風)",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Capture, save, and apply font styles across web pages",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "unlimitedStorage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup/popup.html",
