@@ -90,16 +90,67 @@
     }
 
     // Build CSS rule from saved style
-    function buildCssRule(selector, properties) {
-        const declarations = [];
+    function buildCssRule(selector, properties, options = {}) {
+        if (!options.smartApply) {
+            // Standard behavior: apply all properties to the selector
+            const declarations = [];
+            for (const [prop, data] of Object.entries(properties)) {
+                if (data.enabled && PROP_MAP[prop]) {
+                    declarations.push(`${PROP_MAP[prop]}: ${data.value} !important`);
+                }
+            }
+            return `${selector} { ${declarations.join('; ')}; }`;
+        }
+
+        // Smart Apply behavior
+        const identityProps = ['fontFamily', 'color', 'textShadow'];
+        const typographyProps = ['fontSize', 'lineHeight', 'fontWeight', 'letterSpacing', 'fontStyle', 'textDecoration', 'textTransform'];
+
+        const identityDecls = [];
+        const typographyDecls = [];
 
         for (const [prop, data] of Object.entries(properties)) {
             if (data.enabled && PROP_MAP[prop]) {
-                declarations.push(`${PROP_MAP[prop]}: ${data.value} !important`);
+                const rule = `${PROP_MAP[prop]}: ${data.value} !important`;
+                if (identityProps.includes(prop)) {
+                    identityDecls.push(rule);
+                } else if (typographyProps.includes(prop)) {
+                    typographyDecls.push(rule);
+                }
             }
         }
 
-        return `${selector} { ${declarations.join('; ')}; }`;
+        const cssRules = [];
+
+        // 1. Identity properties apply to container and ALL descendants
+        if (identityDecls.length > 0) {
+            const decls = identityDecls.join('; ');
+            cssRules.push(`${selector} { ${decls}; }`);
+            cssRules.push(`${selector} * { ${decls}; }`);
+        }
+
+        // 2. Typography properties apply to container and specific body text elements
+        // BUT we intentionally EXCLUDE headings (h1-h6) from these generic sizes
+        if (typographyDecls.length > 0) {
+            const decls = typographyDecls.join('; ');
+            const bodySelectors = [
+                selector,
+                `${selector} p`,
+                `${selector} span`,
+                `${selector} li`,
+                `${selector} a`,
+                `${selector} div`,
+                `${selector} td`,
+                `${selector} blockquote`,
+                `${selector} pre`,
+                `${selector} code`
+                // Note: h1-h6 are excluded so they keep their own size/weight
+            ].join(',\n');
+
+            cssRules.push(`${bodySelectors} { ${decls}; }`);
+        }
+
+        return cssRules.join('\n');
     }
 
     // Build CSS rules for article structure style
@@ -366,7 +417,7 @@
                         css += buildArticleCssRules(rule.selector, style.structureStyles) + '\n';
                     } else if (style.properties) {
                         // Single element style
-                        css += buildCssRule(rule.selector, style.properties) + '\n';
+                        css += buildCssRule(rule.selector, style.properties, rule.options) + '\n';
                     }
                 }
             });
@@ -443,13 +494,20 @@
         const selector = getSelector(e.target);
         const urlPattern = window.location.origin + window.location.pathname + '*';
 
+        // Use Smart Apply for most elements to handle nesting and preserve hierarchy
+        // BUT use Exact Apply (smartApply: false) for Headings to allow forcing a specific style on them
+        const isHeading = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(e.target.tagName);
+        const options = {
+            smartApply: !isHeading
+        };
+
         saveAndApplyStyle(pendingStyleId, selector, urlPattern, () => {
             exitPickerMode();
-        });
+        }, options);
     }
 
     // Save rule and apply style immediately
-    function saveAndApplyStyle(styleId, selector, urlPattern, callback) {
+    function saveAndApplyStyle(styleId, selector, urlPattern, callback, options = {}) {
         chrome.storage.local.get(['appliedRules', 'savedStyles'], (result) => {
             const rules = result.appliedRules || [];
             const styles = result.savedStyles || [];
@@ -472,7 +530,10 @@
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2),
                 styleId: styleId,
                 urlPattern: urlPattern,
-                selector: selector
+                styleId: styleId,
+                urlPattern: urlPattern,
+                selector: selector,
+                options: options
             });
 
             chrome.storage.local.set({ appliedRules: rules }, () => {
@@ -496,7 +557,8 @@
                         styleEl.textContent += buildArticleCssRules(selector, style.structureStyles) + '\n';
                     } else if (style.properties) {
                         // Single element style
-                        styleEl.textContent += buildCssRule(selector, style.properties) + '\n';
+                        const options = rules.length ? rules[0].options : {}; // Use options from the rule we just saved
+                        styleEl.textContent += buildCssRule(selector, style.properties, options) + '\n';
                     }
                 }
 
@@ -527,20 +589,9 @@
                 // The buildArticleCssRules will handle adding proper element selectors
                 saveAndApplyStyle(styleId, selector, urlPattern, null);
             } else {
-                // For single styles, apply to article and all text elements inside
-                const textSelectors = [
-                    selector,
-                    `${selector} p`,
-                    `${selector} h1`,
-                    `${selector} h2`,
-                    `${selector} h3`,
-                    `${selector} h4`,
-                    `${selector} li`,
-                    `${selector} span`,
-                    `${selector} a`
-                ].join(', ');
-
-                saveAndApplyStyle(styleId, textSelectors, urlPattern, null);
+                // For single styles, use Smart Apply on the container
+                // This will apply fonts globally but size/spacing only to body text
+                saveAndApplyStyle(styleId, selector, urlPattern, null, { smartApply: true });
             }
         });
     }
