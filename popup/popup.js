@@ -506,13 +506,29 @@
     cancelEditBtn.addEventListener('click', closeModal);
     saveChangesBtn.addEventListener('click', saveEdit);
 
-    // Selection-based collect button
+    // Selection-based collect button (toggle)
     const selectionCollectBtn = document.getElementById('selection-collect-btn');
     if (selectionCollectBtn) {
+        // Check current selection mode state when popup opens
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]) {
+                chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_SELECTION_MODE_STATE' }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        return; // Can't access page
+                    }
+                    if (response && response.isActive) {
+                        selectionCollectBtn.textContent = '✕ Exit Select';
+                        selectionCollectBtn.classList.add('btn-active');
+                    }
+                });
+            }
+        });
+
+        // Toggle selection mode on click
         selectionCollectBtn.addEventListener('click', () => {
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { type: 'ENABLE_SELECTION_MODE' }, (response) => {
+                    chrome.tabs.sendMessage(tabs[0].id, { type: 'TOGGLE_SELECTION_MODE' }, (response) => {
                         if (chrome.runtime.lastError) {
                             // Show error state briefly
                             selectionCollectBtn.textContent = '❌ Failed';
@@ -522,8 +538,14 @@
                             return;
                         }
 
-                        // Close popup to let user select text
-                        window.close();
+                        if (response && response.isActive) {
+                            // Selection mode is now ON - close popup to let user select
+                            window.close();
+                        } else {
+                            // Selection mode is now OFF - update button
+                            selectionCollectBtn.textContent = '✨ Select Text';
+                            selectionCollectBtn.classList.remove('btn-active');
+                        }
                     });
                 }
             });

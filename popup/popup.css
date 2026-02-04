@@ -77,6 +77,10 @@ body {
     transform: none;
 }
 
+.btn-collect.btn-active {
+    background: #6b7280;
+}
+
 /* Tabs */
 .tabs {
     display: flex;

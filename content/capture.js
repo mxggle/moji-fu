@@ -527,7 +527,7 @@
         }
     }
 
-    // Show floating save button near selection
+    // Show floating save button near selection (only visible in selection mode)
     function showSaveButton(x, y) {
         removeSaveButton();
 
@@ -552,20 +552,21 @@
 
         buttonContainer.appendChild(saveButton);
 
-        // Only show article button when NOT in selection mode
-        if (!selectionMode) {
-            // Article structure button
-            saveArticleButton = document.createElement('button');
-            saveArticleButton.className = 'style-copier-save-btn style-copier-article-btn';
-            saveArticleButton.textContent = '📄 Collect Article';
-            saveArticleButton.style.position = 'relative';
-            saveArticleButton.style.left = 'auto';
-            saveArticleButton.style.top = 'auto';
-            saveArticleButton.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-            saveArticleButton.addEventListener('click', handleSaveArticleClick);
+        // Exit selection mode button
+        const exitButton = document.createElement('button');
+        exitButton.className = 'style-copier-save-btn style-copier-exit-btn';
+        exitButton.textContent = '✕ Exit';
+        exitButton.style.position = 'relative';
+        exitButton.style.left = 'auto';
+        exitButton.style.top = 'auto';
+        exitButton.style.background = '#6b7280';
+        exitButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            exitSelectionMode();
+        });
 
-            buttonContainer.appendChild(saveArticleButton);
-        }
+        buttonContainer.appendChild(exitButton);
 
         document.body.appendChild(buttonContainer);
 
@@ -648,6 +649,7 @@
                 if (isDuplicateStyle(style, savedStyles)) {
                     showToast('Style already collected!');
                     removeSaveButton();
+                    selectionMode = false;
                     return;
                 }
 
@@ -662,12 +664,14 @@
                     }
                     chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
                     removeSaveButton();
+                    selectionMode = false;
                 });
             });
         } catch (error) {
             console.error('Error collecting style:', error);
             showToast('Style collected (fonts may be limited)');
             removeSaveButton();
+            selectionMode = false;
         }
     }
 
@@ -725,6 +729,7 @@
                 if (isDuplicateStyle(style, savedStyles)) {
                     showToast('Article style already collected!');
                     removeSaveButton();
+                    selectionMode = false;
                     return;
                 }
 
@@ -739,12 +744,14 @@
                     }
                     chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
                     removeSaveButton();
+                    selectionMode = false;
                 });
             });
         } catch (error) {
             console.error('Error collecting article style:', error);
             showToast('Article collected (fonts may be limited)');
             removeSaveButton();
+            selectionMode = false;
         }
     }
 
@@ -858,17 +865,14 @@
                 ? selectedText.slice(0, 50) + '...'
                 : selectedText;
 
-            // If in selection mode, collect immediately
+            // Only show buttons or collect if in selection mode
             if (selectionMode) {
-                collectStyleFromSelection();
-                selectionMode = false; // Disable selection mode after use
-                return;
+                // Show the collect buttons near the selection
+                const x = rect.left + window.scrollX;
+                const y = rect.bottom + window.scrollY;
+                showSaveButton(x, y);
             }
-
-            // Otherwise, show buttons as usual
-            const x = rect.left + window.scrollX;
-            const y = rect.bottom + window.scrollY;
-            showSaveButton(x, y);
+            // In normal mode, don't show buttons - just allow native selection
         } else {
             removeSaveButton();
             capturedStyles = null;
@@ -945,7 +949,29 @@
     // Enable selection mode
     function enableSelectionMode() {
         selectionMode = true;
-        showToast('Please select text to collect its style');
+        showToast('Select mode ON - Select text to collect its style');
+    }
+
+    // Exit selection mode
+    function exitSelectionMode() {
+        selectionMode = false;
+        removeSaveButton();
+        capturedStyles = null;
+        currentSelection = null;
+        sampleText = null;
+        window.getSelection().removeAllRanges();
+        showToast('Select mode OFF');
+    }
+
+    // Toggle selection mode
+    function toggleSelectionMode() {
+        if (selectionMode) {
+            exitSelectionMode();
+            return false;
+        } else {
+            enableSelectionMode();
+            return true;
+        }
     }
 
     // Handle clicks outside to dismiss
@@ -956,6 +982,7 @@
                 const selection = window.getSelection();
                 if (!selection.toString().trim()) {
                     removeSaveButton();
+                    // Don't exit selection mode on click outside - user may want to select different text
                 }
             }, 10);
         }
@@ -970,7 +997,24 @@
 
         if (message.type === 'ENABLE_SELECTION_MODE') {
             enableSelectionMode();
-            sendResponse({ success: true });
+            sendResponse({ success: true, isActive: true });
+            return true;
+        }
+
+        if (message.type === 'DISABLE_SELECTION_MODE') {
+            exitSelectionMode();
+            sendResponse({ success: true, isActive: false });
+            return true;
+        }
+
+        if (message.type === 'TOGGLE_SELECTION_MODE') {
+            const isActive = toggleSelectionMode();
+            sendResponse({ success: true, isActive: isActive });
+            return true;
+        }
+
+        if (message.type === 'GET_SELECTION_MODE_STATE') {
+            sendResponse({ isActive: selectionMode });
             return true;
         }
     });
