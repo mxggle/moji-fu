@@ -18,7 +18,8 @@
     ];
 
     // Article structure element types to capture
-    const ARTICLE_ELEMENTS = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P'];
+    // Expanded to include more common text elements for better style coverage
+    const ARTICLE_ELEMENTS = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BLOCKQUOTE', 'LI'];
 
     // Common article content selectors
     const ARTICLE_SELECTORS = [

@@ -154,20 +154,137 @@
     }
 
     // Build CSS rules for article structure style
+    // Enhanced to ensure ALL text elements get styled with proper fallbacks
     function buildArticleCssRules(baseSelector, structureStyles) {
         const rules = [];
 
+        // Separate identity properties (apply to all) from typography properties (element-specific)
+        const identityProps = ['fontFamily', 'color', 'textShadow'];
+        const typographyProps = ['fontSize', 'lineHeight', 'fontWeight', 'letterSpacing', 'fontStyle', 'textDecoration', 'textTransform'];
+
+        // Heading fallback hierarchy: lower headings inherit from higher ones
+        const headingFallback = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'];
+
+        // All text elements that should receive body text styles
+        const bodyTextElements = ['p', 'span', 'li', 'td', 'th', 'blockquote', 'figcaption', 'cite', 'q', 'address', 'dd', 'dt', 'label', 'summary'];
+        const codeElements = ['code', 'pre', 'kbd', 'samp', 'var'];
+
+        // 1. First, extract identity properties from P (or first available) for universal application
+        let baseIdentityProps = {};
+        const pStyle = structureStyles['P'] || structureStyles['p'];
+        if (pStyle && pStyle.properties) {
+            for (const prop of identityProps) {
+                const propData = pStyle.properties[prop];
+                if (propData && propData.enabled && propData.value) {
+                    baseIdentityProps[prop] = propData.value;
+                }
+            }
+        }
+
+        // Fallback to H1 if P not available
+        if (Object.keys(baseIdentityProps).length === 0) {
+            const h1Style = structureStyles['H1'] || structureStyles['h1'];
+            if (h1Style && h1Style.properties) {
+                for (const prop of identityProps) {
+                    const propData = h1Style.properties[prop];
+                    if (propData && propData.enabled && propData.value) {
+                        baseIdentityProps[prop] = propData.value;
+                    }
+                }
+            }
+        }
+
+        // 2. Apply identity properties (font-family, color) to ALL descendants
+        if (Object.keys(baseIdentityProps).length > 0) {
+            const identityDecls = Object.entries(baseIdentityProps)
+                .map(([prop, value]) => `${PROP_MAP[prop]}: ${value} !important`)
+                .join('; ');
+
+            // Apply to container and all descendants
+            rules.push(`${baseSelector} { ${identityDecls}; }`);
+            rules.push(`${baseSelector} * { ${identityDecls}; }`);
+        }
+
+        // 3. Apply specific styles for each captured element type
         for (const [tag, data] of Object.entries(structureStyles)) {
             const declarations = [];
 
+            // For headings, only apply typography props (identity already applied globally)
+            // For body text, apply all non-identity props
             for (const [prop, propData] of Object.entries(data.properties)) {
-                if (propData.enabled && PROP_MAP[prop]) {
+                if (propData.enabled && PROP_MAP[prop] && typographyProps.includes(prop)) {
                     declarations.push(`${PROP_MAP[prop]}: ${propData.value} !important`);
                 }
             }
 
             if (declarations.length > 0) {
                 rules.push(`${baseSelector} ${tag.toLowerCase()} { ${declarations.join('; ')}; }`);
+            }
+        }
+
+        // 4. Create fallback rules for uncaptured headings
+        for (let i = 0; i < headingFallback.length; i++) {
+            const heading = headingFallback[i];
+            if (!structureStyles[heading] && !structureStyles[heading.toLowerCase()]) {
+                // Find the closest captured heading to inherit from
+                let fallbackStyle = null;
+
+                // First try higher headings (H3 → H2 → H1)
+                for (let j = i - 1; j >= 0; j--) {
+                    const higherHeading = headingFallback[j];
+                    if (structureStyles[higherHeading] || structureStyles[higherHeading.toLowerCase()]) {
+                        fallbackStyle = structureStyles[higherHeading] || structureStyles[higherHeading.toLowerCase()];
+                        break;
+                    }
+                }
+
+                // If no higher heading, try lower headings (H3 → H4 → H5 → H6)
+                if (!fallbackStyle) {
+                    for (let j = i + 1; j < headingFallback.length; j++) {
+                        const lowerHeading = headingFallback[j];
+                        if (structureStyles[lowerHeading] || structureStyles[lowerHeading.toLowerCase()]) {
+                            fallbackStyle = structureStyles[lowerHeading] || structureStyles[lowerHeading.toLowerCase()];
+                            break;
+                        }
+                    }
+                }
+
+                if (fallbackStyle && fallbackStyle.properties) {
+                    const fallbackDecls = [];
+                    for (const [prop, propData] of Object.entries(fallbackStyle.properties)) {
+                        if (propData.enabled && PROP_MAP[prop] && typographyProps.includes(prop)) {
+                            fallbackDecls.push(`${PROP_MAP[prop]}: ${propData.value} !important`);
+                        }
+                    }
+                    if (fallbackDecls.length > 0) {
+                        rules.push(`${baseSelector} ${heading.toLowerCase()} { ${fallbackDecls.join('; ')}; }`);
+                    }
+                }
+            }
+        }
+
+        // 5. Apply P's typography to all body text elements that weren't explicitly captured
+        if (pStyle && pStyle.properties) {
+            const pTypographyDecls = [];
+            for (const prop of typographyProps) {
+                const propData = pStyle.properties[prop];
+                if (propData && propData.enabled && propData.value && PROP_MAP[prop]) {
+                    pTypographyDecls.push(`${PROP_MAP[prop]}: ${propData.value} !important`);
+                }
+            }
+
+            if (pTypographyDecls.length > 0) {
+                const decls = pTypographyDecls.join('; ');
+
+                // Apply to common text elements
+                for (const el of bodyTextElements) {
+                    if (!structureStyles[el.toUpperCase()] && !structureStyles[el]) {
+                        rules.push(`${baseSelector} ${el} { ${decls}; }`);
+                    }
+                }
+
+                // Apply to inline elements within the container
+                rules.push(`${baseSelector} a { ${decls}; }`);
             }
         }
 
@@ -250,7 +367,7 @@
 
         // For article styles, fontResources is an object with keys being tag names
         const isArticleStyle = typeof fontResources === 'object' &&
-            Object.keys(fontResources).some(key => ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P'].includes(key));
+            Object.keys(fontResources).some(key => ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BLOCKQUOTE', 'LI'].includes(key));
 
         let allGoogleFontsLinks = [];
         let allFontFaceRules = [];

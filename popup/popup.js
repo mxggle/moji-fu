@@ -102,7 +102,7 @@
 
         // For article styles, fontResources is an object with keys being tag names
         const isArticleStyle = typeof fontResources === 'object' &&
-            Object.keys(fontResources).some(key => ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P'].includes(key));
+            Object.keys(fontResources).some(key => ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BLOCKQUOTE', 'LI'].includes(key));
 
         let allGoogleFontsLinks = [];
         let allFontFaceRules = [];
