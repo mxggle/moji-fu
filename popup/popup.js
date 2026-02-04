@@ -133,7 +133,7 @@
 
         // Inject Google Fonts links
         allGoogleFontsLinks.forEach(href => {
-            const linkId = 'style-copier-font-' + btoa(href).replace(/=/g, '').substring(0, 20);
+            const linkId = 'moji-fu-font-' + btoa(href).replace(/=/g, '').substring(0, 20);
             if (!document.getElementById(linkId)) {
                 const link = document.createElement('link');
                 link.id = linkId;
@@ -145,10 +145,10 @@
 
         // Inject @font-face rules
         if (allFontFaceRules.length > 0) {
-            let fontFaceStyleEl = document.getElementById('style-copier-popup-fonts');
+            let fontFaceStyleEl = document.getElementById('moji-fu-popup-fonts');
             if (!fontFaceStyleEl) {
                 fontFaceStyleEl = document.createElement('style');
-                fontFaceStyleEl.id = 'style-copier-popup-fonts';
+                fontFaceStyleEl.id = 'moji-fu-popup-fonts';
                 document.head.appendChild(fontFaceStyleEl);
             }
 

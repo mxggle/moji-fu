@@ -534,7 +534,7 @@
 
         // Create button container
         const buttonContainer = document.createElement('div');
-        buttonContainer.className = 'style-copier-btn-container';
+        buttonContainer.className = 'moji-fu-btn-container';
         buttonContainer.style.left = `${x}px`;
         buttonContainer.style.top = `${y + 10}px`;
         buttonContainer.style.position = 'absolute';
@@ -544,7 +544,7 @@
 
         // Single style button
         saveButton = document.createElement('button');
-        saveButton.className = 'style-copier-save-btn';
+        saveButton.className = 'moji-fu-save-btn';
         saveButton.textContent = 'Collect Style';
         saveButton.style.position = 'relative';
         saveButton.style.left = 'auto';
@@ -555,7 +555,7 @@
 
         // Exit selection mode button
         const exitButton = document.createElement('button');
-        exitButton.className = 'style-copier-save-btn style-copier-exit-btn';
+        exitButton.className = 'moji-fu-save-btn moji-fu-exit-btn';
         exitButton.textContent = '✕ Exit';
         exitButton.style.position = 'relative';
         exitButton.style.left = 'auto';
@@ -830,7 +830,7 @@
     // Show toast notification
     function showToast(message) {
         const toast = document.createElement('div');
-        toast.className = 'style-copier-toast';
+        toast.className = 'moji-fu-toast';
         toast.textContent = message;
         document.body.appendChild(toast);
 
@@ -844,7 +844,7 @@
     // Handle text selection
     function handleMouseUp(e) {
         // Ignore if clicking on our own UI
-        if (e.target.closest('.style-copier-save-btn')) return;
+        if (e.target.closest('.moji-fu-save-btn')) return;
 
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
@@ -977,7 +977,7 @@
 
     // Handle clicks outside to dismiss
     function handleClick(e) {
-        if (saveButton && !e.target.closest('.style-copier-save-btn') && !e.target.closest('.style-copier-btn-container')) {
+        if (saveButton && !e.target.closest('.moji-fu-save-btn') && !e.target.closest('.moji-fu-btn-container')) {
             // Small delay to allow selection events to complete
             setTimeout(() => {
                 const selection = window.getSelection();

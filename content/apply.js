@@ -39,54 +39,265 @@
     ];
 
     // Generate CSS selector for an element
+    // Prioritizes generating specific selectors that target only the article content
     function getSelector(element) {
-        if (element.id) {
+        if (!element || element === document.body || element === document.documentElement) {
+            return 'body';
+        }
+
+        // 1. If element has a unique ID, use it
+        if (element.id && /^[a-zA-Z][\w-]*$/.test(element.id)) {
             return `#${element.id}`;
         }
 
-        const path = [];
-        while (element && element.nodeType === Node.ELEMENT_NODE) {
-            let selector = element.tagName.toLowerCase();
+        // 2. For semantic elements, prefer using role or tag directly
+        const tagName = element.tagName.toLowerCase();
+        const role = element.getAttribute('role');
 
-            if (element.className && typeof element.className === 'string') {
-                const classes = element.className.trim().split(/\s+/)
-                    .filter(c => c && !c.startsWith('style-copier-'))
+        // Check if we can use a simple selector
+        if (tagName === 'article' || tagName === 'main') {
+            // Check if there's only one of this element
+            if (document.querySelectorAll(tagName).length === 1) {
+                return tagName;
+            }
+        }
+
+        if (role === 'main' || role === 'article') {
+            if (document.querySelectorAll(`[role="${role}"]`).length === 1) {
+                return `[role="${role}"]`;
+            }
+        }
+
+        // 3. Build a path with classes
+        const path = [];
+        let current = element;
+
+        while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
+            let selector = current.tagName.toLowerCase();
+
+            // Add meaningful classes (skip utility classes and moji-fu classes)
+            if (current.className && typeof current.className === 'string') {
+                const classes = current.className.trim().split(/\s+/)
+                    .filter(c => c &&
+                        !c.startsWith('moji-fu-') &&
+                        !c.match(/^(is-|has-|js-|u-|wp-block-)/i) && // Skip utility prefixes
+                        c.length > 2 && c.length < 30) // Skip very short or very long classes
                     .slice(0, 2);
                 if (classes.length) {
                     selector += '.' + classes.join('.');
                 }
             }
 
-            path.unshift(selector);
-            element = element.parentNode;
+            // Add nth-of-type if there are multiple siblings with same selector
+            if (current.parentElement) {
+                const siblings = current.parentElement.querySelectorAll(`:scope > ${selector}`);
+                if (siblings.length > 1) {
+                    const index = Array.from(siblings).indexOf(current) + 1;
+                    selector += `:nth-of-type(${index})`;
+                }
+            }
 
-            // Stop at body or after 3 levels
-            if (element === document.body || path.length >= 3) break;
+            path.unshift(selector);
+            current = current.parentElement;
+
+            // Stop after building 4 levels deep (usually enough for uniqueness)
+            if (path.length >= 4) break;
         }
 
-        return path.join(' > ');
+        const fullSelector = path.join(' > ');
+
+        // Verify this selector is unique (matches only the target element)
+        try {
+            const matches = document.querySelectorAll(fullSelector);
+            if (matches.length === 1 && matches[0] === element) {
+                return fullSelector;
+            }
+        } catch (e) {
+            // If selector is invalid, fall through
+        }
+
+        // 4. Fallback: use a simpler selector with just immediate context
+        return path.slice(-2).join(' > ') || tagName;
     }
 
-    // Find article content on page
+    // Readability-style content detection
+    // Positive indicators for main content
+    const POSITIVE_PATTERNS = /article|body|content|entry|main|page|post|text|blog|story|prose/i;
+    // Negative indicators (UI elements, navigation, ads)
+    const NEGATIVE_PATTERNS = /combx|comment|community|disqus|extra|foot|header|menu|modal|nav|remark|rss|shoutbox|sidebar|sponsor|ad-break|agegate|pagination|pager|popup|tweet|twitter|facebook|social|share|related|recommend|widget|overlay|dialog|banner|promo|newsletter/i;
+    // Elements that are definitely NOT main content
+    const UNLIKELY_TAGS = ['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'APPLET', 'NAV', 'ASIDE', 'HEADER', 'FOOTER', 'FORM', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'];
+
+    /**
+     * Calculate content score for an element using Readability-like heuristics
+     */
+    function calculateContentScore(element) {
+        if (!element || element.nodeType !== Node.ELEMENT_NODE) return -1;
+
+        const tagName = element.tagName;
+
+        // Skip unlikely candidates
+        if (UNLIKELY_TAGS.includes(tagName)) return -1;
+
+        // Skip elements with very little content
+        const text = element.textContent || '';
+        if (text.trim().length < 25) return -1;
+
+        let score = 0;
+
+        // 1. Bonus for semantic article containers
+        if (tagName === 'ARTICLE') score += 30;
+        if (tagName === 'MAIN') score += 25;
+        if (element.getAttribute('role') === 'main') score += 25;
+        if (element.getAttribute('role') === 'article') score += 30;
+
+        // 2. Score based on class/id names
+        const className = element.className || '';
+        const id = element.id || '';
+        const classAndId = className + ' ' + id;
+
+        if (POSITIVE_PATTERNS.test(classAndId)) score += 25;
+        if (NEGATIVE_PATTERNS.test(classAndId)) score -= 50;
+
+        // 3. Count paragraphs - articles have multiple paragraphs
+        const paragraphs = element.getElementsByTagName('p');
+        const validParagraphs = Array.from(paragraphs).filter(p =>
+            p.textContent.trim().length > 50 &&
+            p.textContent.split(/\s+/).length > 10
+        );
+        score += Math.min(validParagraphs.length * 3, 30); // Up to 30 points for paragraphs
+
+        // 4. Text density: ratio of text length to element's HTML length
+        const html = element.innerHTML || '';
+        const textDensity = text.length / (html.length || 1);
+        if (textDensity > 0.25) score += 15; // Good text density
+        if (textDensity > 0.5) score += 10;  // Very good density
+
+        // 5. Link density penalty: too many links = probably navigation
+        const links = element.getElementsByTagName('a');
+        const linkText = Array.from(links).reduce((sum, a) => sum + (a.textContent || '').length, 0);
+        const linkDensity = linkText / (text.length || 1);
+        if (linkDensity > 0.5) score -= 30; // More than half is links = bad
+        if (linkDensity > 0.3) score -= 15;
+
+        // 6. Bonus for containing common article elements
+        if (element.querySelector('h1, h2')) score += 5;
+        if (element.querySelector('blockquote')) score += 3;
+        if (element.querySelector('img')) score += 2;
+        if (element.querySelector('figure')) score += 3;
+
+        // 7. Penalty for deeply nested elements (usually not main content)
+        let depth = 0;
+        let parent = element.parentElement;
+        while (parent && parent !== document.body) {
+            depth++;
+            parent = parent.parentElement;
+        }
+        if (depth > 8) score -= (depth - 8) * 2;
+
+        // 8. Bonus for reasonable size (not too small, not the entire page)
+        const rect = element.getBoundingClientRect();
+        if (rect.width > 300 && rect.height > 200) score += 5;
+
+        return score;
+    }
+
+    /**
+     * Find the main article content using Readability-style scoring
+     */
     function findArticleContent() {
-        for (const selector of ARTICLE_SELECTORS) {
+        let bestElement = null;
+        let bestScore = -Infinity;
+
+        // 1. First, try semantic elements with strong indicators
+        const semanticSelectors = [
+            'article[role="main"]',
+            'main article',
+            '[role="main"] article',
+            'article',
+            '[role="article"]',
+            'main',
+            '[role="main"]'
+        ];
+
+        for (const selector of semanticSelectors) {
             const element = document.querySelector(selector);
-            if (element && element.textContent.trim().length > 100) {
-                return element;
+            if (element) {
+                const score = calculateContentScore(element);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestElement = element;
+                }
             }
         }
-        // Fallback: find the largest text block
-        const paragraphs = document.querySelectorAll('p');
-        let best = null;
-        let maxLength = 0;
-        paragraphs.forEach(p => {
-            const parent = p.parentElement;
-            if (parent && parent.textContent.length > maxLength) {
-                maxLength = parent.textContent.length;
-                best = parent;
+
+        // 2. If semantic search found a good candidate (score > 30), use it
+        if (bestScore > 30 && bestElement) {
+            console.log('Style Copier: Found article via semantic elements, score:', bestScore);
+            return bestElement;
+        }
+
+        // 3. Try common article class patterns
+        for (const selector of ARTICLE_SELECTORS) {
+            try {
+                const elements = document.querySelectorAll(selector);
+                for (const element of elements) {
+                    const score = calculateContentScore(element);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestElement = element;
+                    }
+                }
+            } catch (e) {
+                // Invalid selector, skip
             }
-        });
-        return best;
+        }
+
+        // 4. If still no good match, do a broader search
+        if (bestScore < 20) {
+            // Look at all divs and sections
+            const candidates = document.querySelectorAll('div, section');
+            for (const element of candidates) {
+                // Skip very small or very large elements
+                const text = element.textContent || '';
+                if (text.length < 500 || text.length > 100000) continue;
+
+                const score = calculateContentScore(element);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestElement = element;
+                }
+            }
+        }
+
+        // 5. Last resort: find the container with the most paragraphs
+        if (!bestElement || bestScore < 10) {
+            const paragraphs = document.querySelectorAll('p');
+            const parentScores = new Map();
+
+            paragraphs.forEach(p => {
+                if (p.textContent.trim().length < 50) return;
+
+                let parent = p.parentElement;
+                // Go up max 3 levels to find a good container
+                for (let i = 0; i < 3 && parent && parent !== document.body; i++) {
+                    const current = parentScores.get(parent) || 0;
+                    parentScores.set(parent, current + p.textContent.length);
+                    parent = parent.parentElement;
+                }
+            });
+
+            let maxScore = 0;
+            for (const [element, score] of parentScores) {
+                if (score > maxScore) {
+                    maxScore = score;
+                    bestElement = element;
+                }
+            }
+        }
+
+        console.log('Style Copier: Best article candidate score:', bestScore, bestElement);
+        return bestElement;
     }
 
     // Build CSS rule from saved style
@@ -427,7 +638,7 @@
 
         // Inject Google Fonts links
         allGoogleFontsLinks.forEach(href => {
-            const linkId = 'style-copier-font-' + btoa(href).replace(/=/g, '').substring(0, 20);
+            const linkId = 'moji-fu-font-' + btoa(href).replace(/=/g, '').substring(0, 20);
             if (!document.getElementById(linkId)) {
                 const link = document.createElement('link');
                 link.id = linkId;
@@ -438,10 +649,10 @@
         });
 
         // Prepare font style element
-        let fontFaceStyleEl = document.getElementById('style-copier-fonts');
+        let fontFaceStyleEl = document.getElementById('moji-fu-fonts');
         if (!fontFaceStyleEl) {
             fontFaceStyleEl = document.createElement('style');
-            fontFaceStyleEl.id = 'style-copier-fonts';
+            fontFaceStyleEl.id = 'moji-fu-fonts';
             document.head.appendChild(fontFaceStyleEl);
         }
 
@@ -540,10 +751,10 @@
             });
 
             if (css) {
-                let styleEl = document.getElementById('style-copier-applied');
+                let styleEl = document.getElementById('moji-fu-applied');
                 if (!styleEl) {
                     styleEl = document.createElement('style');
-                    styleEl.id = 'style-copier-applied';
+                    styleEl.id = 'moji-fu-applied';
                     document.head.appendChild(styleEl);
                 }
                 styleEl.textContent = css;
@@ -554,7 +765,7 @@
     // Show picker mode hint
     function showPickerHint() {
         pickerHint = document.createElement('div');
-        pickerHint.className = 'style-copier-picker-hint';
+        pickerHint.className = 'moji-fu-picker-hint';
         pickerHint.innerHTML = 'Click an element to apply style <button>Cancel</button>';
 
         pickerHint.querySelector('button').addEventListener('click', exitPickerMode);
@@ -581,7 +792,7 @@
         }
 
         if (currentHighlight) {
-            currentHighlight.classList.remove('style-copier-highlight');
+            currentHighlight.classList.remove('moji-fu-highlight');
             currentHighlight = null;
         }
     }
@@ -591,19 +802,19 @@
         if (!pickerActive) return;
 
         if (currentHighlight) {
-            currentHighlight.classList.remove('style-copier-highlight');
+            currentHighlight.classList.remove('moji-fu-highlight');
         }
 
-        if (!e.target.closest('.style-copier-picker-hint')) {
+        if (!e.target.closest('.moji-fu-picker-hint')) {
             currentHighlight = e.target;
-            currentHighlight.classList.add('style-copier-highlight');
+            currentHighlight.classList.add('moji-fu-highlight');
         }
     }
 
     // Handle click during picker mode
     function handlePickerClick(e) {
         if (!pickerActive) return;
-        if (e.target.closest('.style-copier-picker-hint')) return;
+        if (e.target.closest('.moji-fu-picker-hint')) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -662,10 +873,10 @@
                         injectFontResources(style.fontResources);
                     }
 
-                    let styleEl = document.getElementById('style-copier-applied');
+                    let styleEl = document.getElementById('moji-fu-applied');
                     if (!styleEl) {
                         styleEl = document.createElement('style');
-                        styleEl.id = 'style-copier-applied';
+                        styleEl.id = 'moji-fu-applied';
                         document.head.appendChild(styleEl);
                     }
 
@@ -745,7 +956,7 @@
             const rules = (result.appliedRules || []).filter(r => r.id !== ruleId);
             chrome.storage.local.set({ appliedRules: rules }, () => {
                 // Refresh styles on page
-                const styleEl = document.getElementById('style-copier-applied');
+                const styleEl = document.getElementById('moji-fu-applied');
                 if (styleEl) {
                     styleEl.remove();
                 }
@@ -758,7 +969,7 @@
     // Show toast notification
     function showToast(message) {
         const toast = document.createElement('div');
-        toast.className = 'style-copier-toast';
+        toast.className = 'moji-fu-toast';
         toast.textContent = message;
         document.body.appendChild(toast);
 

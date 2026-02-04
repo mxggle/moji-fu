@@ -1,7 +1,7 @@
 /* Style Copier - Content Script Styles */
 
 /* Floating save button */
-.style-copier-save-btn {
+.moji-fu-save-btn {
   position: absolute;
   z-index: 2147483647;
   background: #2c3e50;
@@ -17,12 +17,12 @@
   transition: background 0.15s ease;
 }
 
-.style-copier-save-btn:hover {
+.moji-fu-save-btn:hover {
   background: #1a252f;
 }
 
 /* Element picker overlay */
-.style-copier-picker-overlay {
+.moji-fu-picker-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -33,19 +33,19 @@
   pointer-events: none;
 }
 
-.style-copier-picker-active {
+.moji-fu-picker-active {
   pointer-events: auto;
 }
 
 /* Highlight on hover during picker mode */
-.style-copier-highlight {
+.moji-fu-highlight {
   outline: 2px solid #3498db !important;
   outline-offset: 2px;
   background-color: rgba(52, 152, 219, 0.1) !important;
 }
 
 /* Picker mode indicator */
-.style-copier-picker-hint {
+.moji-fu-picker-hint {
   position: fixed;
   top: 16px;
   left: 50%;
@@ -60,7 +60,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
-.style-copier-picker-hint button {
+.moji-fu-picker-hint button {
   background: #e74c3c;
   color: #fff;
   border: none;
@@ -72,7 +72,7 @@
 }
 
 /* Toast notification */
-.style-copier-toast {
+.moji-fu-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
@@ -92,6 +92,7 @@
     transform: translateX(100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
