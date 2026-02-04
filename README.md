@@ -13,6 +13,8 @@
 **Moji-fu** (Japanese for "Character Style" or "Literary Wind") is a precision tool designed for designers and developers who appreciate the nuance of web typography. It allows you to "lift" the typographic identity of any webpage—capturing font families, weights, sizes, and spacing—and apply them instantly elsewhere.
 
 Unlike simple inspectors, **Moji-fu** doesn't just copy names; it captures the actual font files, embedding them as data URLs to ensure your collections remain perfectly styled even if the original source disappears.
+<img width="730" height="968" alt="CleanShot 2026-02-04 at 20 52 22@2x" src="https://github.com/user-attachments/assets/9b936a27-7bc3-4215-813f-493df03288f0" />
+
 
 ## ✨ Features
 
