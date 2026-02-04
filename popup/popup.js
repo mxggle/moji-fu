@@ -187,7 +187,7 @@
                 const elementPreviews = Object.entries(style.structureStyles || {})
                     .map(([tag, data]) => {
                         const previewStyle = buildInlineStyle(data.properties);
-                        return `<div class="element-preview"><span class="element-tag">${tag}</span><span style="${previewStyle}">${escapeHtml(data.sampleText)}</span></div>`;
+                        return `<div class="element-preview"><span class="element-tag">${tag}</span><span class="styled-sample" style="${previewStyle}">${escapeHtml(data.sampleText)}</span></div>`;
                     }).join('');
 
                 return `
@@ -304,8 +304,12 @@
     // Build inline style string from properties
     function buildInlineStyle(properties) {
         return Object.entries(properties)
-            .filter(([_, data]) => data.enabled)
-            .map(([prop, data]) => `${CSS_PROPS[prop]}: ${data.value}`)
+            .filter(([_, data]) => data.enabled && data.value && String(data.value).trim() !== '')
+            .map(([prop, data]) => {
+                // Escape double quotes in values to prevent HTML attribute conflicts
+                const escapedValue = String(data.value).replace(/"/g, "'");
+                return `${CSS_PROPS[prop]}: ${escapedValue} !important`;
+            })
             .join('; ');
     }
 
