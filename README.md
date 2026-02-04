@@ -18,12 +18,11 @@ Unlike simple inspectors, **Moji-fu** doesn't just copy names; it captures the a
 
 ## ✨ Features
 
-- **🎯 Precision Capture**: Instantly extract font-family, weight, size, line-height, and color from any element.
-- **📄 Article DNA Capture**: Capture the entire typographic hierarchy of an article (H1-H6 and Paragraphs) in one click.
-- **💾 Font Embedding**: Automatically downloads font files (`.woff2`, `.ttf`, etc.) and converts them to Data URLs, making your collection offline-ready and permanent.
-- **⚡ Quick Apply**: Inject collected styles or full article structures into any page to preview how your content looks with premium typography.
-- **🎨 Japandi Interface**: A sleek, minimalist popup interface inspired by Japanese aesthetics, featuring a calm palette and smooth transitions.
-- **📊 Style Library**: Manage your collected styles with a badge indicator showing your current collection count.
+- **🎯 Precision Capture**: Instantly extract font-family, weight, size, line-height, and color from any element with a single click.
+- **📄 Article DNA Capture**: Use the intelligent "Collect Article" feature to harvest the entire typographic hierarchy (H1-H6 and Paragraphs) automatically.
+- **💾 Font Persistence**: Automatically captures font files (`.woff2`, `.ttf`, etc.) and converts them to Data URLs, ensuring your stored styles are offline-ready and permanent.
+- **⚡ Quick Apply**: Inject collected styles back into any page to preview how content looks with premium typography.
+- **📊 Style Library**: Organise and manage your collection with ease, featuring clear indicators for single vs. article-wide capture.
 
 ## 🚀 Installation
 
@@ -35,23 +34,19 @@ Unlike simple inspectors, **Moji-fu** doesn't just copy names; it captures the a
 ## 🛠 Usage
 
 1. **Collect**: 
-   - **Selection**: Select any text on a page to see the "Collect Style" button.
-   - **Full Article**: Click the popup's "Collect Article" button (or use the floating button) to automatically harvest the hierarchy of the current page.
-2. **Library**: View your collection in the popup. Styles are ordered by most recently collected.
+   - **Manual Selection**: Toggle **Select Text** mode to pick any specific element on a page.
+   - **Auto-Collect**: Click **Collect Article** in the popup to automatically identify and harvest the main content's typographic structure.
+2. **Review**: Manage your collection within the popup. Styles are categorized and sorted for easy access.
 3. **Apply**: 
-   - Click **Quick Apply** on any saved style to inject it into the current page.
-   - For single styles, you can pick a specific element to "paint" with the saved typography.
-4. **Edit**: Tweak captured properties in the library before applying them to ensure a perfect fit.
+   - **⚡ Quick Apply**: Instantly project a saved style onto the current page's matching elements.
+   - **Precision Apply**: Manually select an element to "paint" with a specific saved typography.
+4. **Tune**: Edit captured properties directly in the library to refine the look before deployment.
 
 ## 📐 Technical Highlights
 
-- **Font Persistence**: Uses the Font Loading API and background fetching to bypass CORS and capture raw font data.
-- **Article Detection**: Intelligent selectors find the main content block, excluding ads and navigation for a clean capture.
-- **Zero Dependencies**: Built with vanilla JavaScript, CSS, and HTML for maximum performance and a lightweight footprint.
-
-## 🎨 Design Philosophy
-
-Inspired by the concept of *Utsushi* (写し), the project focuses on the respectful study and reproduction of beautiful design patterns. The UI is built to be minimalist, focused, and out of your way—embodying the Zen principle of *Ma* (negative space).
+- **Article Detection**: Implementation of advanced selectors to identify main content blocks, providing clean captures devoid of ads or navigation noise.
+- **Font-Loading Integration**: Utilizes the Font Loading API and background messaging to bypass CORS limitations and secure raw font data.
+- **Zero Dependencies**: Pure Vanilla JS, CSS, and HTML for a lightweight (under 100KB) and highly performant footprint.
 
 ## 📜 License
 
