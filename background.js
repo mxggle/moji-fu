@@ -64,12 +64,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'STYLE_SAVED') {
-    // Update badge to show saved styles count
-    chrome.storage.local.get(['savedStyles'], (result) => {
-      const count = (result.savedStyles || []).length;
-      chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
-      chrome.action.setBadgeBackgroundColor({ color: '#4A90A4' });
-    });
+    // Badge count removal requested by user - logic removed
   }
 
   return true;
@@ -107,11 +102,7 @@ async function fetchFontAsDataUrl(url) {
   return `data:${mime};base64,${base64}`;
 }
 
-// Initialize badge on install
+// Initialize badge on install - cleared as requested
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(['savedStyles'], (result) => {
-    const count = (result.savedStyles || []).length;
-    chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
-    chrome.action.setBadgeBackgroundColor({ color: '#4A90A4' });
-  });
+  chrome.action.setBadgeText({ text: '' });
 });
