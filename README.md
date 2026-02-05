@@ -48,6 +48,12 @@ Unlike simple inspectors, **Moji Fu** doesn't just copy names; it captures the a
 - **Font-Loading Integration**: Utilizes the Font Loading API and background messaging to bypass CORS limitations and secure raw font data.
 - **Zero Dependencies**: Pure Vanilla JS, CSS, and HTML for a lightweight (under 100KB) and highly performant footprint.
 
+## ⚠️ Font Licensing Notice
+
+Many fonts are protected by copyright and require a license for use. **Moji Fu** captures styles from fonts that are already served to you by websites (such as Google Fonts, which are free to use). However, users are responsible for ensuring they have the appropriate rights to use any fonts they capture and apply.
+
+This tool is intended for **personal use and experimentation**. If you plan to use captured typography in commercial projects, please verify the font's license terms first.
+
 ## 📜 License
 
 MIT © 2026. Built with ❤️ for typography lovers.
