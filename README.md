@@ -1,7 +1,7 @@
-# Moji-fu (文字風) 🖋️
+# Moji Fu (文字風) 🖋️
 
-> **The Art of Typographic Transposition.**  
-> A Chrome Extension to capture, collect, and apply font styles across the web with one click.
+> **Read every word in the fonts you love.**  
+> A Chrome Extension to capture, collect, and apply beautiful typography across the web.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](#)
@@ -10,9 +10,9 @@
 
 ## 📖 Overview
 
-**Moji-fu** (Japanese for "Character Style" or "Literary Wind") is a precision tool designed for designers and developers who appreciate the nuance of web typography. It allows you to "lift" the typographic identity of any webpage—capturing font families, weights, sizes, and spacing—and apply them instantly elsewhere.
+**Moji Fu** (Japanese for "Character Style" or "Literary Wind") is a tool for anyone who treats reading as an art form. It allows you to "lift" the typographic identity of your favorite corners of the web—capturing font families, weights, and spacing—and apply them instantly to whatever you are reading.
 
-Unlike simple inspectors, **Moji-fu** doesn't just copy names; it captures the actual font files, embedding them as data URLs to ensure your collections remain perfectly styled even if the original source disappears.
+Unlike simple inspectors, **Moji Fu** doesn't just copy names; it captures the actual font files, embedding them as data URLs to ensure your collections remain perfectly styled even if the original source disappears.
 <img width="730" height="968" alt="CleanShot 2026-02-04 at 20 52 22@2x" src="https://github.com/user-attachments/assets/9b936a27-7bc3-4215-813f-493df03288f0" />
 
 
