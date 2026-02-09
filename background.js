@@ -3,6 +3,8 @@
 // ============================================
 // HOT RELOAD (Development only)
 // ============================================
+// Set to true when running the dev server (npm run dev)
+const DEV_MODE = false;
 const DEV_SERVER_PORT = 35729;
 
 function connectHotReload() {
@@ -30,8 +32,10 @@ function connectHotReload() {
   }
 }
 
-// Start hot reload connection
-connectHotReload();
+// Start hot reload connection only in development mode
+if (DEV_MODE) {
+  connectHotReload();
+}
 
 // ============================================
 // MAIN EXTENSION LOGIC
