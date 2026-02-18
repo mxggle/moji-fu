@@ -406,6 +406,88 @@ body {
     text-overflow: ellipsis;
 }
 
+.property-value.editable {
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 1px 4px;
+    margin: -1px -4px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.property-value.editable:hover {
+    background: #eef2ff;
+    color: #4338ca;
+}
+
+.property-value.editing {
+    overflow: visible;
+    white-space: normal;
+    padding: 0;
+    margin: 0;
+}
+
+/* Inline editor inputs */
+.property-value-editor {
+    display: flex;
+    align-items: center;
+}
+
+.editor-input {
+    width: 100%;
+    font-size: 11px;
+    padding: 3px 6px;
+    border: 1px solid #c7d2fe;
+    border-radius: 4px;
+    outline: none;
+    color: #1e1b4b;
+    background: #fafafe;
+    font-family: inherit;
+}
+
+.editor-input:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+}
+
+.editor-select {
+    width: 100%;
+    font-size: 11px;
+    padding: 3px 4px;
+    border: 1px solid #c7d2fe;
+    border-radius: 4px;
+    outline: none;
+    color: #1e1b4b;
+    background: #fafafe;
+    cursor: pointer;
+}
+
+.editor-select:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+}
+
+/* Color editor */
+.color-editor {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.color-editor .editor-input {
+    flex: 1;
+    min-width: 0;
+}
+
 /* Toggle Switch */
 .toggle {
     position: relative;

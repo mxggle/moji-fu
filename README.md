@@ -4,7 +4,7 @@
 > A Chrome Extension to capture, collect, and apply beautiful typography across the web.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](#)
 
 ---
 

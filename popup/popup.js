@@ -272,26 +272,63 @@
         appliedEmpty.style.display = 'none';
         // Reverse to show most recent on top (since we use unshift when adding)
         const displayRules = [...appliedRules].reverse();
-        appliedList.innerHTML = displayRules.map(rule => `
-      <li class="style-item applied-item" data-id="${rule.id}">
-        <div class="style-header">
-          <span class="style-name">${escapeHtml(rule.styleName)}</span>
-          <button class="icon-btn delete remove-rule-btn" title="Remove">×</button>
-        </div>
-        <div class="applied-info">
-          <div class="applied-selector" title="${escapeHtml(rule.selector)}">
-            <strong>Selector:</strong> ${escapeHtml(truncateText(rule.selector, 40))}
-          </div>
-          <div class="applied-url" title="${escapeHtml(rule.urlPattern)}">
-            <strong>URL:</strong> ${escapeHtml(truncateText(rule.urlPattern, 35))}
-          </div>
-        </div>
-      </li>
-    `).join('');
+        appliedList.innerHTML = displayRules.map(rule => {
+            const style = savedStyles.find(s => s.id === rule.styleId);
+            const isArticle = style && style.type === 'article';
+            const typeBadge = isArticle
+                ? '<span class="type-badge article-badge">Article</span>'
+                : '<span class="type-badge single-badge">Single</span>';
+
+            let previewHtml = '';
+            if (style) {
+                // Inject font resources so preview shows correct fonts
+                if (style.fontResources) {
+                    injectFontResourcesForPreview(style.fontResources);
+                }
+
+                if (isArticle && style.structureStyles) {
+                    const elementPreviews = Object.entries(style.structureStyles)
+                        .map(([tag, data]) => {
+                            const previewStyle = buildInlineStyle(data.properties);
+                            return `<div class="element-preview"><span class="element-tag">${tag}</span><span class="styled-sample" style="${previewStyle}">${escapeHtml(data.sampleText)}</span></div>`;
+                        }).join('');
+                    previewHtml = `<div class="article-preview">${elementPreviews}</div>`;
+                } else if (style.properties) {
+                    previewHtml = `<div class="preview-text" style="${buildInlineStyle(style.properties)}">${escapeHtml(style.sampleText || 'Sample Text')}</div>`;
+                }
+            }
+
+            return `
+                <li class="style-item applied-item" data-id="${rule.id}" data-style-id="${rule.styleId}">
+                    <div class="style-header">
+                        ${typeBadge}
+                        <span class="style-name">${escapeHtml(rule.styleName)}</span>
+                        <div class="style-actions">
+                            ${style ? '<button class="icon-btn edit-btn" title="Edit">✎</button>' : ''}
+                            <button class="icon-btn delete remove-rule-btn" title="Remove">×</button>
+                        </div>
+                    </div>
+                    ${previewHtml}
+                    <div class="applied-info">
+                        <div class="applied-selector" title="${escapeHtml(rule.selector)}">
+                            <strong>Selector:</strong> ${escapeHtml(truncateText(rule.selector, 40))}
+                        </div>
+                        <div class="applied-url" title="${escapeHtml(rule.urlPattern)}">
+                            <strong>URL:</strong> ${escapeHtml(truncateText(rule.urlPattern, 35))}
+                        </div>
+                    </div>
+                </li>
+            `;
+        }).join('');
 
         // Attach remove listeners
         appliedList.querySelectorAll('.remove-rule-btn').forEach(btn => {
             btn.addEventListener('click', handleRemoveRule);
+        });
+
+        // Attach edit listeners
+        appliedList.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', handleEdit);
         });
     }
 
@@ -344,6 +381,166 @@
         return div.innerHTML;
     }
 
+    // Get appropriate editor type for a CSS property
+    function getEditorType(prop) {
+        switch (prop) {
+            case 'color': return 'color';
+            case 'fontWeight':
+            case 'fontStyle':
+            case 'textTransform':
+                return 'select';
+            default:
+                return 'text';
+        }
+    }
+
+    // Get select options for select-type properties
+    function getSelectOptions(prop) {
+        switch (prop) {
+            case 'fontWeight':
+                return ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
+            case 'fontStyle':
+                return ['normal', 'italic', 'oblique'];
+            case 'textTransform':
+                return ['none', 'uppercase', 'lowercase', 'capitalize'];
+            default:
+                return [];
+        }
+    }
+
+    // Helper to convert color values to hex for the color input
+    function toHexColor(color) {
+        if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+        if (/^#[0-9a-f]{3}$/i.test(color)) {
+            return '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3];
+        }
+        const temp = document.createElement('div');
+        temp.style.color = color;
+        document.body.appendChild(temp);
+        const computed = getComputedStyle(temp).color;
+        document.body.removeChild(temp);
+        const match = computed.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+        if (match) {
+            return '#' + [match[1], match[2], match[3]].map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
+        }
+        return '#000000';
+    }
+
+    // Start inline editing of a property value
+    function startEditValue(el, prop, tag) {
+        if (el.querySelector('.property-value-editor')) return;
+
+        const currentValue = tag
+            ? editingProperties[tag].properties[prop].value
+            : editingProperties[prop].value;
+        const editorType = getEditorType(prop);
+
+        el.textContent = '';
+        el.classList.add('editing');
+
+        if (editorType === 'color') {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'property-value-editor color-editor';
+
+            const colorInput = document.createElement('input');
+            colorInput.type = 'color';
+            colorInput.className = 'color-swatch';
+            colorInput.value = toHexColor(currentValue);
+
+            const textInput = document.createElement('input');
+            textInput.type = 'text';
+            textInput.className = 'editor-input';
+            textInput.value = currentValue;
+
+            colorInput.addEventListener('input', () => {
+                textInput.value = colorInput.value;
+            });
+            textInput.addEventListener('input', () => {
+                try { colorInput.value = toHexColor(textInput.value); } catch (e) { /* ignore */ }
+            });
+
+            const commit = () => commitEditValue(prop, textInput.value, tag);
+
+            textInput.addEventListener('blur', (e) => {
+                if (e.relatedTarget === colorInput) return;
+                commit();
+            });
+            colorInput.addEventListener('blur', (e) => {
+                if (e.relatedTarget === textInput) return;
+                commit();
+            });
+            textInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); revertEditValue(el, currentValue); }
+            });
+
+            wrapper.appendChild(colorInput);
+            wrapper.appendChild(textInput);
+            el.appendChild(wrapper);
+            textInput.focus();
+            textInput.select();
+        } else if (editorType === 'select') {
+            const select = document.createElement('select');
+            select.className = 'property-value-editor editor-select';
+            const options = getSelectOptions(prop);
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt;
+                option.textContent = opt;
+                if (opt === currentValue) option.selected = true;
+                select.appendChild(option);
+            });
+
+            select.addEventListener('change', () => commitEditValue(prop, select.value, tag));
+            select.addEventListener('blur', () => commitEditValue(prop, select.value, tag));
+            select.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); revertEditValue(el, currentValue); }
+            });
+
+            el.appendChild(select);
+            select.focus();
+        } else {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'property-value-editor editor-input';
+            input.value = currentValue;
+
+            input.addEventListener('blur', () => commitEditValue(prop, input.value, tag));
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commitEditValue(prop, input.value, tag); }
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); revertEditValue(el, currentValue); }
+            });
+
+            el.appendChild(input);
+            input.focus();
+            input.select();
+        }
+    }
+
+    // Commit an edited property value and re-render
+    function commitEditValue(prop, newValue, tag) {
+        if (tag) {
+            editingProperties[tag].properties[prop].value = newValue;
+        } else {
+            editingProperties[prop].value = newValue;
+        }
+
+        if (editingType === 'article') {
+            renderArticleEditModal();
+            updateArticleEditPreview();
+        } else {
+            renderEditModal();
+            updateEditPreview();
+        }
+    }
+
+    // Revert inline edit on Escape
+    function revertEditValue(el, originalValue) {
+        el.classList.remove('editing');
+        el.textContent = originalValue;
+        el.title = originalValue;
+    }
+
     // Get style ID from button click
     function getStyleId(btn) {
         return btn.closest('.style-item').dataset.id;
@@ -351,7 +548,8 @@
 
     // Handle edit button click
     function handleEdit(e) {
-        const id = getStyleId(e.target);
+        const item = e.target.closest('.style-item');
+        const id = item.dataset.styleId || item.dataset.id;
         const style = savedStyles.find(s => s.id === id);
         if (!style) return;
 
@@ -382,7 +580,7 @@
             <li class="property-item">
                 <div class="property-info">
                     <div class="property-name">${PROP_LABELS[prop]}</div>
-                    <div class="property-value" title="${escapeHtml(data.value)}">${escapeHtml(data.value)}</div>
+                    <div class="property-value editable" data-prop="${prop}" title="${escapeHtml(data.value)}">${escapeHtml(data.value)}</div>
                 </div>
                 <label class="toggle">
                     <input type="checkbox" data-prop="${prop}" ${data.enabled ? 'checked' : ''}>
@@ -393,6 +591,12 @@
 
         propertyList.querySelectorAll('input[type="checkbox"]').forEach(input => {
             input.addEventListener('change', handleToggle);
+        });
+
+        propertyList.querySelectorAll('.property-value.editable').forEach(el => {
+            el.addEventListener('click', () => {
+                startEditValue(el, el.dataset.prop);
+            });
         });
     }
 
@@ -412,7 +616,7 @@
                     <li class="property-item">
                         <div class="property-info">
                             <div class="property-name">${PROP_LABELS[prop]}</div>
-                            <div class="property-value" title="${escapeHtml(propData.value)}">${escapeHtml(propData.value)}</div>
+                            <div class="property-value editable" data-tag="${tag}" data-prop="${prop}" title="${escapeHtml(propData.value)}">${escapeHtml(propData.value)}</div>
                         </div>
                         <label class="toggle">
                             <input type="checkbox" data-tag="${tag}" data-prop="${prop}" ${propData.enabled ? 'checked' : ''}>
@@ -432,6 +636,12 @@
 
         propertyList.querySelectorAll('input[type="checkbox"]').forEach(input => {
             input.addEventListener('change', handleArticleToggle);
+        });
+
+        propertyList.querySelectorAll('.property-value.editable').forEach(el => {
+            el.addEventListener('click', () => {
+                startEditValue(el, el.dataset.prop, el.dataset.tag);
+            });
         });
     }
 
