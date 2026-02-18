@@ -31,6 +31,7 @@
         "<all_urls>"
       ],
       "js": [
+        "storage.js",
         "content/capture.js",
         "content/apply.js"
       ],

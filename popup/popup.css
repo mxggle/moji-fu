@@ -213,6 +213,18 @@ body {
     color: #111827;
 }
 
+.icon-btn:disabled,
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.icon-btn:disabled:hover,
+.btn:disabled:hover {
+    background: inherit;
+    transform: none;
+}
+
 .icon-btn.delete:hover {
     background: #fee2e2;
     color: #dc2626;
@@ -556,4 +568,38 @@ body {
     color: #667eea;
     font-size: 11px;
     margin-right: 8px;
+}
+
+.download-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #1d4ed8;
+    background: #dbeafe;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    padding: 3px 8px;
+    margin-bottom: 8px;
+}
+
+.download-badge.failed {
+    color: #b91c1c;
+    background: #fee2e2;
+    border-color: #fecaca;
+}
+
+.spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(37, 99, 235, 0.25);
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: moji-spin 0.8s linear infinite;
+}
+
+@keyframes moji-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }

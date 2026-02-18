@@ -105,19 +105,21 @@
         return fontData;
     }
 
-    // Extract URLs from font source string
-    function extractUrlsFromSrc(srcString) {
+    // Extract URLs from font source string and resolve relative paths
+    function extractUrlsFromSrc(srcString, baseUrl) {
         const urls = [];
         // Match url() patterns in the source string
         const urlRegex = /url\(['"]?([^'"\)]+)['"]?\)/gi;
         let match;
+
+        const base = baseUrl || window.location.href;
 
         while ((match = urlRegex.exec(srcString)) !== null) {
             let url = match[1];
             // Convert relative URLs to absolute
             if (url && !url.startsWith('data:') && !url.startsWith('http')) {
                 try {
-                    url = new URL(url, window.location.href).href;
+                    url = new URL(url, base).href;
                 } catch (e) {
                     // Keep as-is if URL parsing fails
                 }
@@ -146,13 +148,29 @@
                     const rules = sheet.cssRules || sheet.rules;
                     if (!rules) continue;
 
+                    const baseUrl = sheet.href || window.location.href;
+
                     for (const rule of rules) {
                         if (rule instanceof CSSFontFaceRule) {
                             const ruleFontFamily = rule.style.fontFamily.replace(/['"]/g, '').trim();
                             // Check if this @font-face rule matches our font
                             if (ruleFontFamily === primaryFont ||
                                 primaryFont.toLowerCase().includes(ruleFontFamily.toLowerCase())) {
-                                fontFaceRules.push(rule.cssText);
+
+                                // Rewrite relative URLs to absolute based on stylesheet location
+                                let cssText = rule.cssText;
+                                cssText = cssText.replace(/url\(['"]?([^'"\)]+)['"]?\)/gi, (match, url) => {
+                                    if (url && !url.startsWith('data:') && !url.startsWith('http')) {
+                                        try {
+                                            return `url("${new URL(url, baseUrl).href}")`;
+                                        } catch (e) {
+                                            return match;
+                                        }
+                                    }
+                                    return match;
+                                });
+
+                                fontFaceRules.push(cssText);
                             }
                         }
                     }
@@ -187,7 +205,8 @@
                             if (ruleFontFamily === primaryFont ||
                                 primaryFont.toLowerCase().includes(ruleFontFamily.toLowerCase())) {
                                 const srcValue = rule.style.getPropertyValue('src') || '';
-                                const sources = extractUrlsFromSrc(srcValue);
+                                // Pass sheet.href as baseUrl to resolve relative URLs correctly
+                                const sources = extractUrlsFromSrc(srcValue, sheet.href || window.location.href);
                                 entries.push({
                                     family: ruleFontFamily,
                                     weight: rule.style.getPropertyValue('font-weight') || 'normal',
@@ -211,9 +230,11 @@
     }
 
     // Parse @font-face blocks from CSS text
-    function parseFontFaceCss(cssText) {
+    function parseFontFaceCss(cssText, baseUrl) {
         const entries = [];
         const blocks = cssText.match(/@font-face\s*{[^}]*}/gi) || [];
+
+        const base = baseUrl || window.location.href;
 
         blocks.forEach(block => {
             const familyMatch = block.match(/font-family\s*:\s*([^;]+);/i);
@@ -225,7 +246,7 @@
 
             const family = familyMatch ? familyMatch[1].replace(/['"]/g, '').trim() : '';
             const srcValue = srcMatch ? srcMatch[1] : '';
-            const sources = extractUrlsFromSrc(srcValue);
+            const sources = extractUrlsFromSrc(srcValue, base);
 
             if (family && sources.length > 0) {
                 entries.push({
@@ -253,7 +274,8 @@
                 const response = await fetch(href);
                 if (!response.ok) continue;
                 const cssText = await response.text();
-                entries.push(...parseFontFaceCss(cssText));
+                // Pass href as baseUrl to resolve relative URLs in the fetched CSS
+                entries.push(...parseFontFaceCss(cssText, href));
             } catch (e) {
                 // Ignore failures - continue with other links
             }
@@ -614,6 +636,91 @@
         });
     }
 
+    function saveStyle(style) {
+        return MojiFuStorage.getSavedStyles().then(savedStyles => {
+            if (isDuplicateStyle(style, savedStyles)) {
+                return { success: false, duplicate: true };
+            }
+
+            savedStyles.unshift(style);
+            return MojiFuStorage.setSavedStyles(savedStyles).then(() => {
+                chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
+                return { success: true };
+            });
+        });
+    }
+
+    function updateSavedStyle(styleId, patch) {
+        return MojiFuStorage.getSavedStyles().then(savedStyles => {
+            const index = savedStyles.findIndex(s => s.id === styleId);
+            if (index === -1) {
+                return false;
+            }
+
+            savedStyles[index] = {
+                ...savedStyles[index],
+                ...patch
+            };
+
+            return MojiFuStorage.setSavedStyles(savedStyles).then(() => {
+                chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
+                return true;
+            });
+        });
+    }
+
+    function countDownloadedFonts(fontResources) {
+        if (!fontResources) return 0;
+
+        if (Array.isArray(fontResources.capturedFonts)) {
+            return fontResources.capturedFonts.filter(f => f.dataUrl).length;
+        }
+
+        if (typeof fontResources === 'object') {
+            return Object.values(fontResources).reduce((sum, entry) => {
+                if (entry && Array.isArray(entry.capturedFonts)) {
+                    return sum + entry.capturedFonts.filter(f => f.dataUrl).length;
+                }
+                return sum;
+            }, 0);
+        }
+
+        return 0;
+    }
+
+    async function enrichStyleFontsInBackground(styleId, getResources, onCompleteMessage) {
+        try {
+            const fontResources = await getResources();
+            const downloadedFonts = countDownloadedFonts(fontResources);
+
+            await updateSavedStyle(styleId, {
+                fontResources,
+                downloadStatus: 'ready',
+                downloadedFonts,
+                downloadCompletedAt: Date.now()
+            });
+
+            if (onCompleteMessage) {
+                showToast(onCompleteMessage(downloadedFonts));
+            }
+
+            chrome.runtime.sendMessage({
+                type: 'FONT_DOWNLOAD_COMPLETE',
+                styleId,
+                downloadedFonts
+            });
+        } catch (error) {
+            console.error('Error downloading fonts in background:', error);
+            await updateSavedStyle(styleId, {
+                downloadStatus: 'failed',
+                downloadError: error?.message || 'Font download failed',
+                downloadCompletedAt: Date.now()
+            });
+            showToast('Style saved, but font download failed');
+            chrome.runtime.sendMessage({ type: 'FONT_DOWNLOAD_FAILED', styleId });
+        }
+    }
+
     // Handle save button click - now async to download fonts
     async function handleSaveClick(e) {
         e.preventDefault();
@@ -623,57 +730,43 @@
 
         // Show loading state
         if (saveButton) {
-            saveButton.textContent = 'Downloading fonts...';
+            saveButton.textContent = 'Saving...';
             saveButton.disabled = true;
         }
 
-        try {
-            // Extract font resources AND download font files
-            const fontResources = await extractFontResourcesAsync(capturedStyles.fontFamily.value);
+        const styleId = generateId();
+        const style = {
+            id: styleId,
+            type: 'single',
+            name: generateName(capturedStyles),
+            sourceUrl: window.location.href,
+            createdAt: Date.now(),
+            properties: capturedStyles,
+            sampleText: sampleText || 'Sample Text',
+            fontResources: null,
+            downloadStatus: 'downloading',
+            downloadedFonts: 0
+        };
 
-            const style = {
-                id: generateId(),
-                type: 'single', // Single element style
-                name: generateName(capturedStyles),
-                sourceUrl: window.location.href,
-                createdAt: Date.now(),
-                properties: capturedStyles,
-                sampleText: sampleText || 'Sample Text',
-                fontResources: fontResources  // Includes downloaded fonts as data URLs
-            };
-
-            // Save to storage
-            chrome.storage.local.get(['savedStyles'], (result) => {
-                const savedStyles = result.savedStyles || [];
-
-                // Check for duplicates
-                if (isDuplicateStyle(style, savedStyles)) {
-                    showToast('Style already collected!');
-                    removeSaveButton();
-                    selectionMode = false;
-                    return;
-                }
-
-                savedStyles.unshift(style); // Add at beginning for most recent on top
-
-                chrome.storage.local.set({ savedStyles }, () => {
-                    const fontCount = fontResources.capturedFonts?.filter(f => f.dataUrl)?.length || 0;
-                    if (fontCount > 0) {
-                        showToast(`Style collected with ${fontCount} font(s)!`);
-                    } else {
-                        showToast('Style collected!');
-                    }
-                    chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
-                    removeSaveButton();
-                    selectionMode = false;
-                });
-            });
-        } catch (error) {
-            console.error('Error collecting style:', error);
-            showToast('Style collected (fonts may be limited)');
+        const result = await saveStyle(style);
+        if (!result.success) {
+            showToast('Style already collected!');
             removeSaveButton();
             selectionMode = false;
+            return;
         }
+
+        showToast('Style saved. Font download running in background...');
+        removeSaveButton();
+        selectionMode = false;
+
+        enrichStyleFontsInBackground(
+            styleId,
+            () => extractFontResourcesAsync(capturedStyles.fontFamily.value),
+            (fontCount) => fontCount > 0
+                ? `Font download complete (${fontCount} font${fontCount > 1 ? 's' : ''})`
+                : 'Font download complete'
+        );
     }
 
     // Handle save article structure button click - now async to download fonts
@@ -694,69 +787,53 @@
             return;
         }
 
-        // Show loading state
         if (saveArticleButton) {
-            saveArticleButton.textContent = '📄 Downloading fonts...';
+            saveArticleButton.textContent = '📄 Saving...';
             saveArticleButton.disabled = true;
         }
 
-        try {
-            // Extract font resources AND download font files for all element types
-            const articleFontResources = {};
-            let totalFontsDownloaded = 0;
+        const styleId = generateId();
+        const style = {
+            id: styleId,
+            type: 'article',
+            name: generateArticleName(),
+            sourceUrl: window.location.href,
+            createdAt: Date.now(),
+            structureStyles,
+            sampleText: 'Article Structure',
+            fontResources: null,
+            downloadStatus: 'downloading',
+            downloadedFonts: 0
+        };
 
-            for (const [tag, data] of Object.entries(structureStyles)) {
-                const resources = await extractFontResourcesAsync(data.properties.fontFamily.value);
-                articleFontResources[tag] = resources;
-                totalFontsDownloaded += resources.capturedFonts?.filter(f => f.dataUrl)?.length || 0;
-            }
-
-            const style = {
-                id: generateId(),
-                type: 'article', // Article structure style
-                name: generateArticleName(),
-                sourceUrl: window.location.href,
-                createdAt: Date.now(),
-                structureStyles: structureStyles, // Contains H1, H2, ..., P with their properties
-                sampleText: 'Article Structure',
-                fontResources: articleFontResources  // Font resources for each element type
-            };
-
-            // Save to storage
-            chrome.storage.local.get(['savedStyles'], (result) => {
-                const savedStyles = result.savedStyles || [];
-
-                // Check for duplicates
-                if (isDuplicateStyle(style, savedStyles)) {
-                    showToast('Article style already collected!');
-                    removeSaveButton();
-                    selectionMode = false;
-                    return;
-                }
-
-                savedStyles.unshift(style); // Add at beginning for most recent on top
-
-                chrome.storage.local.set({ savedStyles }, () => {
-                    const elementCount = Object.keys(structureStyles).length;
-                    if (totalFontsDownloaded > 0) {
-                        showToast(`Article collected! (${elementCount} elements, ${totalFontsDownloaded} fonts)`);
-                    } else {
-                        showToast(`Article style collected! (${elementCount} elements)`);
-                    }
-                    chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
-                    removeSaveButton();
-                    selectionMode = false;
-                });
-            });
-        } catch (error) {
-            console.error('Error collecting article style:', error);
-            showToast('Article collected (fonts may be limited)');
+        const result = await saveStyle(style);
+        if (!result.success) {
+            showToast('Article style already collected!');
             removeSaveButton();
             selectionMode = false;
+            return;
         }
+
+        showToast('Article saved. Font download running in background...');
+        removeSaveButton();
+        selectionMode = false;
+
+        enrichStyleFontsInBackground(
+            styleId,
+            async () => {
+                const articleFontResources = {};
+                for (const [tag, data] of Object.entries(structureStyles)) {
+                    articleFontResources[tag] = await extractFontResourcesAsync(data.properties.fontFamily.value);
+                }
+                return articleFontResources;
+            },
+            (fontCount) => fontCount > 0
+                ? `Article fonts ready (${fontCount} font${fontCount > 1 ? 's' : ''})`
+                : 'Article font download complete'
+        );
     }
 
-    // Auto-collect article styles (triggered from popup) - now async to download fonts
+    // Auto-collect article styles (triggered from popup)
     async function autoCollectArticleStyles(sendResponse) {
         const article = findArticleContent();
         if (!article) {
@@ -773,58 +850,43 @@
             return;
         }
 
-        showToast('Downloading fonts...');
+        const styleId = generateId();
+        const style = {
+            id: styleId,
+            type: 'article',
+            name: generateArticleName(),
+            sourceUrl: window.location.href,
+            createdAt: Date.now(),
+            structureStyles,
+            sampleText: 'Article Structure',
+            fontResources: null,
+            downloadStatus: 'downloading',
+            downloadedFonts: 0
+        };
 
-        try {
-            // Extract font resources AND download font files for all element types
-            const articleFontResources = {};
-            let totalFontsDownloaded = 0;
-
-            for (const [tag, data] of Object.entries(structureStyles)) {
-                const resources = await extractFontResourcesAsync(data.properties.fontFamily.value);
-                articleFontResources[tag] = resources;
-                totalFontsDownloaded += resources.capturedFonts?.filter(f => f.dataUrl)?.length || 0;
-            }
-
-            const style = {
-                id: generateId(),
-                type: 'article',
-                name: generateArticleName(),
-                sourceUrl: window.location.href,
-                createdAt: Date.now(),
-                structureStyles: structureStyles,
-                sampleText: 'Article Structure',
-                fontResources: articleFontResources  // Font resources for each element type
-            };
-
-            chrome.storage.local.get(['savedStyles'], (result) => {
-                const savedStyles = result.savedStyles || [];
-
-                // Check for duplicates
-                if (isDuplicateStyle(style, savedStyles)) {
-                    showToast('Article style already collected!');
-                    sendResponse({ success: false, error: 'Duplicate style' });
-                    return;
-                }
-
-                savedStyles.unshift(style); // Add at beginning for most recent on top
-
-                chrome.storage.local.set({ savedStyles }, () => {
-                    const elementCount = Object.keys(structureStyles).length;
-                    if (totalFontsDownloaded > 0) {
-                        showToast(`Article collected! (${elementCount} elements, ${totalFontsDownloaded} fonts)`);
-                    } else {
-                        showToast(`Article style collected! (${elementCount} elements)`);
-                    }
-                    chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
-                    sendResponse({ success: true, elementCount, fontsDownloaded: totalFontsDownloaded });
-                });
-            });
-        } catch (error) {
-            console.error('Error auto-collecting article style:', error);
-            showToast('Article collected (fonts may be limited)');
-            sendResponse({ success: true, error: 'Font download failed' });
+        const result = await saveStyle(style);
+        if (!result.success) {
+            showToast('Article style already collected!');
+            sendResponse({ success: false, error: 'Duplicate style' });
+            return;
         }
+
+        showToast('Article saved. Font download running in background...');
+        sendResponse({ success: true, started: true, styleId });
+
+        enrichStyleFontsInBackground(
+            styleId,
+            async () => {
+                const articleFontResources = {};
+                for (const [tag, data] of Object.entries(structureStyles)) {
+                    articleFontResources[tag] = await extractFontResourcesAsync(data.properties.fontFamily.value);
+                }
+                return articleFontResources;
+            },
+            (fontCount) => fontCount > 0
+                ? `Article fonts ready (${fontCount} font${fontCount > 1 ? 's' : ''})`
+                : 'Article font download complete'
+        );
     }
 
     // Show toast notification
@@ -882,69 +944,48 @@
         }
     }
 
-    // Collect style from current selection - now async to download fonts
+    // Collect style from current selection
     async function collectStyleFromSelection() {
         if (!capturedStyles) return;
 
-        showToast('Downloading fonts...');
+        const styleId = generateId();
+        const style = {
+            id: styleId,
+            type: 'single',
+            name: generateName(capturedStyles),
+            sourceUrl: window.location.href,
+            createdAt: Date.now(),
+            properties: capturedStyles,
+            sampleText: sampleText || 'Sample Text',
+            fontResources: null,
+            downloadStatus: 'downloading',
+            downloadedFonts: 0
+        };
 
-        try {
-            // Extract font resources AND download font files
-            const fontResources = await extractFontResourcesAsync(capturedStyles.fontFamily.value);
-
-            const style = {
-                id: generateId(),
-                type: 'single',
-                name: generateName(capturedStyles),
-                sourceUrl: window.location.href,
-                createdAt: Date.now(),
-                properties: capturedStyles,
-                sampleText: sampleText || 'Sample Text',
-                fontResources: fontResources  // Includes downloaded fonts as data URLs
-            };
-
-            // Save to storage
-            chrome.storage.local.get(['savedStyles'], (result) => {
-                const savedStyles = result.savedStyles || [];
-
-                // Check for duplicates
-                if (isDuplicateStyle(style, savedStyles)) {
-                    showToast('Style already collected!');
-                    // Clear selection and captured data
-                    window.getSelection().removeAllRanges();
-                    capturedStyles = null;
-                    currentSelection = null;
-                    sampleText = null;
-                    return;
-                }
-
-                savedStyles.unshift(style); // Add at beginning for most recent on top
-
-                chrome.storage.local.set({ savedStyles }, () => {
-                    const fontCount = fontResources.capturedFonts?.filter(f => f.dataUrl)?.length || 0;
-                    if (fontCount > 0) {
-                        showToast(`Style collected with ${fontCount} font(s)!`);
-                    } else {
-                        showToast('Style collected from selection!');
-                    }
-                    chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
-
-                    // Clear selection and captured data
-                    window.getSelection().removeAllRanges();
-                    capturedStyles = null;
-                    currentSelection = null;
-                    sampleText = null;
-                });
-            });
-        } catch (error) {
-            console.error('Error collecting style:', error);
-            showToast('Style collected (fonts may be limited)');
-            // Clear selection and captured data
+        const result = await saveStyle(style);
+        if (!result.success) {
+            showToast('Style already collected!');
             window.getSelection().removeAllRanges();
             capturedStyles = null;
             currentSelection = null;
             sampleText = null;
+            return;
         }
+
+        showToast('Style saved. Font download running in background...');
+
+        enrichStyleFontsInBackground(
+            styleId,
+            () => extractFontResourcesAsync(capturedStyles.fontFamily.value),
+            (fontCount) => fontCount > 0
+                ? `Font download complete (${fontCount} font${fontCount > 1 ? 's' : ''})`
+                : 'Font download complete'
+        );
+
+        window.getSelection().removeAllRanges();
+        capturedStyles = null;
+        currentSelection = null;
+        sampleText = null;
     }
 
     // Enable selection mode

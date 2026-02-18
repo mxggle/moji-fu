@@ -68,10 +68,10 @@
         });
     });
 
-    // Load saved styles from storage
+    // Load saved styles from storage (IndexedDB)
     function loadStyles() {
-        chrome.storage.local.get(['savedStyles'], (result) => {
-            savedStyles = result.savedStyles || [];
+        MojiFuStorage.getSavedStyles().then(styles => {
+            savedStyles = styles;
             renderStyleList();
         });
     }
@@ -178,9 +178,14 @@
             }
 
             const isArticle = style.type === 'article';
+            const isDownloading = style.downloadStatus === 'downloading';
+            const isFailed = style.downloadStatus === 'failed';
             const typeBadge = isArticle
                 ? '<span class="type-badge article-badge">Article</span>'
                 : '<span class="type-badge single-badge">Single</span>';
+            const loadingBadge = isDownloading
+                ? '<span class="download-badge"><span class="spinner"></span>Downloading fonts...</span>'
+                : (isFailed ? '<span class="download-badge failed">Font download failed</span>' : '');
 
             if (isArticle) {
                 // Article structure style display
@@ -196,10 +201,11 @@
                             ${typeBadge}
                             <span class="style-name">${escapeHtml(style.name)}</span>
                             <div class="style-actions">
-                                <button class="icon-btn edit-btn" title="Edit">✎</button>
+                                <button class="icon-btn edit-btn" title="Edit" ${isDownloading ? 'disabled' : ''}>✎</button>
                                 <button class="icon-btn delete delete-btn" title="Delete">×</button>
                             </div>
                         </div>
+                        ${loadingBadge}
                         <div class="article-preview">
                             ${elementPreviews}
                         </div>
@@ -207,8 +213,8 @@
                             ${escapeHtml(truncateUrl(style.sourceUrl))}
                         </div>
                         <div class="btn-group">
-                            <button class="btn btn-primary quick-apply-btn" title="Auto-apply to article content">⚡ Auto Apply</button>
-                            <button class="btn btn-secondary apply-btn" title="Select element to apply">Select</button>
+                            <button class="btn btn-primary quick-apply-btn" title="Auto-apply to article content" ${isDownloading ? 'disabled' : ''}>⚡ Auto Apply</button>
+                            <button class="btn btn-secondary apply-btn" title="Select element to apply" ${isDownloading ? 'disabled' : ''}>Select</button>
                         </div>
                     </li>
                 `;
@@ -220,10 +226,11 @@
                             ${typeBadge}
                             <span class="style-name">${escapeHtml(style.name)}</span>
                             <div class="style-actions">
-                                <button class="icon-btn edit-btn" title="Edit">✎</button>
+                                <button class="icon-btn edit-btn" title="Edit" ${isDownloading ? 'disabled' : ''}>✎</button>
                                 <button class="icon-btn delete delete-btn" title="Delete">×</button>
                             </div>
                         </div>
+                        ${loadingBadge}
                         <div class="preview-text" style="${buildInlineStyle(style.properties)}">
                             ${escapeHtml(style.sampleText || 'Sample Text')}
                         </div>
@@ -231,8 +238,8 @@
                             ${escapeHtml(truncateUrl(style.sourceUrl))}
                         </div>
                         <div class="btn-group">
-                            <button class="btn btn-primary quick-apply-btn" title="Auto-apply to article content">⚡ Auto Apply</button>
-                            <button class="btn btn-secondary apply-btn" title="Select element to apply">Select</button>
+                            <button class="btn btn-primary quick-apply-btn" title="Auto-apply to article content" ${isDownloading ? 'disabled' : ''}>⚡ Auto Apply</button>
+                            <button class="btn btn-secondary apply-btn" title="Select element to apply" ${isDownloading ? 'disabled' : ''}>Select</button>
                         </div>
                     </li>
                 `;
@@ -474,20 +481,29 @@
             savedStyles[idx].properties = editingProperties;
         }
 
-        chrome.storage.local.set({ savedStyles }, () => {
+        MojiFuStorage.setSavedStyles(savedStyles).then(() => {
             renderStyleList();
             closeModal();
+        }).catch(err => {
+            console.error('Error saving edited style:', err);
         });
     }
 
     // Handle delete button click
     function handleDelete(e) {
         const id = getStyleId(e.target);
-        savedStyles = savedStyles.filter(s => s.id !== id);
 
-        chrome.storage.local.set({ savedStyles }, () => {
+        // Read fresh from storage before writing to avoid race conditions
+        // with background font-download writes that could resurrect deleted items
+        MojiFuStorage.getSavedStyles().then(freshStyles => {
+            freshStyles = freshStyles.filter(s => s.id !== id);
+            savedStyles = freshStyles;
+
+            return MojiFuStorage.setSavedStyles(freshStyles);
+        }).then(() => {
             renderStyleList();
-            chrome.runtime.sendMessage({ type: 'STYLE_SAVED' });
+        }).catch(err => {
+            console.error('Delete failed:', err);
         });
     }
 
@@ -579,11 +595,10 @@
                         }
 
                         if (response && response.success) {
-                            autoCollectBtn.textContent = '✓ Collected!';
+                            autoCollectBtn.textContent = response.started ? '✓ Queued' : '✓ Collected!';
                             setTimeout(() => {
                                 autoCollectBtn.textContent = '📄 Collect';
-                            }, 1500);
-                            // Refresh the style list
+                            }, 1200);
                             loadStyles();
                         }
                     });
@@ -598,6 +613,21 @@
         }
     });
 
-    // Initialize
-    loadStyles();
+    // Listen for IndexedDB storage changes (cross-context)
+    MojiFuStorage.onChanged((key) => {
+        if (key === 'savedStyles') {
+            loadStyles();
+        }
+    });
+
+    chrome.runtime.onMessage.addListener((message) => {
+        if (message.type === 'FONT_DOWNLOAD_COMPLETE' || message.type === 'FONT_DOWNLOAD_FAILED' || message.type === 'STYLE_SAVED') {
+            loadStyles();
+        }
+    });
+
+    // Initialize: open IndexedDB, migrate data if needed, then load styles
+    MojiFuStorage.init().then(() => {
+        loadStyles();
+    });
 })();

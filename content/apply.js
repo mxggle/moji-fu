@@ -713,9 +713,8 @@
 
     // Apply saved styles for current page
     function applyStoredStyles() {
-        chrome.storage.local.get(['appliedRules', 'savedStyles'], (result) => {
+        chrome.storage.local.get(['appliedRules'], (result) => {
             const rules = result.appliedRules || [];
-            const styles = result.savedStyles || [];
             const currentUrl = window.location.href;
 
             // Filter rules for current URL
@@ -729,36 +728,39 @@
 
             if (matchingRules.length === 0) return;
 
-            // Build and inject stylesheet
-            // Reverse the order so the topmost (most recent) rule takes effect last
-            let css = '';
-            matchingRules.reverse().forEach(rule => {
-                const style = styles.find(s => s.id === rule.styleId);
-                if (style) {
-                    // Inject font resources for this style
-                    if (style.fontResources) {
-                        injectFontResources(style.fontResources);
-                    }
+            // Fetch savedStyles from IndexedDB
+            MojiFuStorage.getSavedStyles().then(styles => {
+                // Build and inject stylesheet
+                // Reverse the order so the topmost (most recent) rule takes effect last
+                let css = '';
+                [...matchingRules].reverse().forEach(rule => {
+                    const style = styles.find(s => s.id === rule.styleId);
+                    if (style) {
+                        // Inject font resources for this style
+                        if (style.fontResources) {
+                            injectFontResources(style.fontResources);
+                        }
 
-                    if (style.type === 'article' && style.structureStyles) {
-                        // Article structure style - apply different rules per element type
-                        css += buildArticleCssRules(rule.selector, style.structureStyles) + '\n';
-                    } else if (style.properties) {
-                        // Single element style
-                        css += buildCssRule(rule.selector, style.properties, rule.options) + '\n';
+                        if (style.type === 'article' && style.structureStyles) {
+                            // Article structure style - apply different rules per element type
+                            css += buildArticleCssRules(rule.selector, style.structureStyles) + '\n';
+                        } else if (style.properties) {
+                            // Single element style
+                            css += buildCssRule(rule.selector, style.properties, rule.options) + '\n';
+                        }
                     }
+                });
+
+                if (css) {
+                    let styleEl = document.getElementById('moji-fu-applied');
+                    if (!styleEl) {
+                        styleEl = document.createElement('style');
+                        styleEl.id = 'moji-fu-applied';
+                        document.head.appendChild(styleEl);
+                    }
+                    styleEl.textContent = css;
                 }
             });
-
-            if (css) {
-                let styleEl = document.getElementById('moji-fu-applied');
-                if (!styleEl) {
-                    styleEl = document.createElement('style');
-                    styleEl.id = 'moji-fu-applied';
-                    document.head.appendChild(styleEl);
-                }
-                styleEl.textContent = css;
-            }
         });
     }
 
@@ -836,9 +838,9 @@
 
     // Save rule and apply style immediately
     function saveAndApplyStyle(styleId, selector, urlPattern, callback, options = {}) {
-        chrome.storage.local.get(['appliedRules', 'savedStyles'], (result) => {
+        // Read both appliedRules (chrome.storage) and savedStyles (IndexedDB)
+        chrome.storage.local.get(['appliedRules'], (result) => {
             const rules = result.appliedRules || [];
-            const styles = result.savedStyles || [];
 
             // Check for duplicate rule (same styleId + selector + urlPattern)
             const isDuplicate = rules.some(rule =>
@@ -858,40 +860,40 @@
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2),
                 styleId: styleId,
                 urlPattern: urlPattern,
-                styleId: styleId,
-                urlPattern: urlPattern,
                 selector: selector,
                 options: options
             });
 
             chrome.storage.local.set({ appliedRules: rules }, () => {
-                // Apply immediately
-                const style = styles.find(s => s.id === styleId);
-                if (style) {
-                    // Inject font resources for this style
-                    if (style.fontResources) {
-                        injectFontResources(style.fontResources);
+                // Apply immediately - fetch style from IndexedDB
+                MojiFuStorage.getSavedStyles().then(styles => {
+                    const style = styles.find(s => s.id === styleId);
+                    if (style) {
+                        // Inject font resources for this style
+                        if (style.fontResources) {
+                            injectFontResources(style.fontResources);
+                        }
+
+                        let styleEl = document.getElementById('moji-fu-applied');
+                        if (!styleEl) {
+                            styleEl = document.createElement('style');
+                            styleEl.id = 'moji-fu-applied';
+                            document.head.appendChild(styleEl);
+                        }
+
+                        if (style.type === 'article' && style.structureStyles) {
+                            // Article structure style
+                            styleEl.textContent += buildArticleCssRules(selector, style.structureStyles) + '\n';
+                        } else if (style.properties) {
+                            // Single element style
+                            const options = rules.length ? rules[0].options : {}; // Use options from the rule we just saved
+                            styleEl.textContent += buildCssRule(selector, style.properties, options) + '\n';
+                        }
                     }
 
-                    let styleEl = document.getElementById('moji-fu-applied');
-                    if (!styleEl) {
-                        styleEl = document.createElement('style');
-                        styleEl.id = 'moji-fu-applied';
-                        document.head.appendChild(styleEl);
-                    }
-
-                    if (style.type === 'article' && style.structureStyles) {
-                        // Article structure style
-                        styleEl.textContent += buildArticleCssRules(selector, style.structureStyles) + '\n';
-                    } else if (style.properties) {
-                        // Single element style
-                        const options = rules.length ? rules[0].options : {}; // Use options from the rule we just saved
-                        styleEl.textContent += buildCssRule(selector, style.properties, options) + '\n';
-                    }
-                }
-
-                showToast('Style applied!');
-                if (callback) callback();
+                    showToast('Style applied!');
+                    if (callback) callback();
+                });
             });
         });
     }
@@ -908,8 +910,7 @@
         const urlPattern = window.location.origin + '/*';
 
         // Check if this is an article structure style
-        chrome.storage.local.get(['savedStyles'], (result) => {
-            const styles = result.savedStyles || [];
+        MojiFuStorage.getSavedStyles().then(styles => {
             const style = styles.find(s => s.id === styleId);
 
             if (style && style.type === 'article') {
@@ -928,25 +929,26 @@
     function getAppliedRulesForCurrentPage(sendResponse) {
         const currentUrl = window.location.href;
 
-        chrome.storage.local.get(['appliedRules', 'savedStyles'], (result) => {
+        chrome.storage.local.get(['appliedRules'], (result) => {
             const rules = result.appliedRules || [];
-            const styles = result.savedStyles || [];
 
-            const matchingRules = rules.filter(rule => {
-                if (rule.urlPattern.endsWith('*')) {
-                    const prefix = rule.urlPattern.slice(0, -1);
-                    return currentUrl.startsWith(prefix);
-                }
-                return currentUrl === rule.urlPattern;
-            }).map(rule => {
-                const style = styles.find(s => s.id === rule.styleId);
-                return {
-                    ...rule,
-                    styleName: style ? style.name : 'Unknown'
-                };
+            MojiFuStorage.getSavedStyles().then(styles => {
+                const matchingRules = rules.filter(rule => {
+                    if (rule.urlPattern.endsWith('*')) {
+                        const prefix = rule.urlPattern.slice(0, -1);
+                        return currentUrl.startsWith(prefix);
+                    }
+                    return currentUrl === rule.urlPattern;
+                }).map(rule => {
+                    const style = styles.find(s => s.id === rule.styleId);
+                    return {
+                        ...rule,
+                        styleName: style ? style.name : 'Unknown'
+                    };
+                });
+
+                sendResponse({ rules: matchingRules, url: currentUrl });
             });
-
-            sendResponse({ rules: matchingRules, url: currentUrl });
         });
     }
 
