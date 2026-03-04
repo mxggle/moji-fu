@@ -3,7 +3,15 @@
 (function () {
     'use strict';
 
-    // Properties to capture
+    const MIN_ARTICLE_TEXT_LENGTH = 100;
+    const MIN_CONTENT_SCORE = 25;
+    const MAX_SAMPLE_TEXT_LENGTH = 50;
+    const TOAST_DURATION_MS = 2500;
+    const CLICK_DISMISS_DELAY_MS = 10;
+    const MAX_SELECTOR_DEPTH = 4;
+    const MIN_CLASS_LENGTH = 2;
+    const MAX_CLASS_LENGTH = 30;
+
     const TEXT_PROPERTIES = [
         'fontFamily',
         'fontSize',
@@ -67,10 +75,11 @@
                     const normalizedFontFamily = fontFamilyName.toLowerCase().replace(/\s+/g, ' ');
 
                     // Check if this font matches our target
-                    if (normalizedFontFamily === normalizedPrimary ||
+                    if (
+                        normalizedFontFamily === normalizedPrimary ||
                         normalizedPrimary.includes(normalizedFontFamily) ||
-                        normalizedFontFamily.includes(normalizedPrimary)) {
-
+                        normalizedFontFamily.includes(normalizedPrimary)
+                    ) {
                         // Extract font source URLs from the FontFace object
                         let sources = [];
                         if (font.loaded) {
@@ -146,29 +155,41 @@
                 try {
                     // Skip cross-origin stylesheets unless CORS is enabled
                     const rules = sheet.cssRules || sheet.rules;
-                    if (!rules) continue;
+                    if (!rules) {
+                        continue;
+                    }
 
                     const baseUrl = sheet.href || window.location.href;
 
                     for (const rule of rules) {
                         if (rule instanceof CSSFontFaceRule) {
-                            const ruleFontFamily = rule.style.fontFamily.replace(/['"]/g, '').trim();
+                            const ruleFontFamily = rule.style.fontFamily
+                                .replace(/['"]/g, '')
+                                .trim();
                             // Check if this @font-face rule matches our font
-                            if (ruleFontFamily === primaryFont ||
-                                primaryFont.toLowerCase().includes(ruleFontFamily.toLowerCase())) {
-
+                            if (
+                                ruleFontFamily === primaryFont ||
+                                primaryFont.toLowerCase().includes(ruleFontFamily.toLowerCase())
+                            ) {
                                 // Rewrite relative URLs to absolute based on stylesheet location
                                 let cssText = rule.cssText;
-                                cssText = cssText.replace(/url\(['"]?([^'"\)]+)['"]?\)/gi, (match, url) => {
-                                    if (url && !url.startsWith('data:') && !url.startsWith('http')) {
-                                        try {
-                                            return `url("${new URL(url, baseUrl).href}")`;
-                                        } catch (e) {
-                                            return match;
+                                cssText = cssText.replace(
+                                    /url\(['"]?([^'"\)]+)['"]?\)/gi,
+                                    (match, url) => {
+                                        if (
+                                            url &&
+                                            !url.startsWith('data:') &&
+                                            !url.startsWith('http')
+                                        ) {
+                                            try {
+                                                return `url("${new URL(url, baseUrl).href}")`;
+                                            } catch (e) {
+                                                return match;
+                                            }
                                         }
+                                        return match;
                                     }
-                                    return match;
-                                });
+                                );
 
                                 fontFaceRules.push(cssText);
                             }
@@ -197,22 +218,34 @@
             for (const sheet of document.styleSheets) {
                 try {
                     const rules = sheet.cssRules || sheet.rules;
-                    if (!rules) continue;
+                    if (!rules) {
+                        continue;
+                    }
 
                     for (const rule of rules) {
                         if (rule instanceof CSSFontFaceRule) {
-                            const ruleFontFamily = rule.style.fontFamily.replace(/['"]/g, '').trim();
-                            if (ruleFontFamily === primaryFont ||
-                                primaryFont.toLowerCase().includes(ruleFontFamily.toLowerCase())) {
+                            const ruleFontFamily = rule.style.fontFamily
+                                .replace(/['"]/g, '')
+                                .trim();
+                            if (
+                                ruleFontFamily === primaryFont ||
+                                primaryFont.toLowerCase().includes(ruleFontFamily.toLowerCase())
+                            ) {
                                 const srcValue = rule.style.getPropertyValue('src') || '';
                                 // Pass sheet.href as baseUrl to resolve relative URLs correctly
-                                const sources = extractUrlsFromSrc(srcValue, sheet.href || window.location.href);
+                                const sources = extractUrlsFromSrc(
+                                    srcValue,
+                                    sheet.href || window.location.href
+                                );
                                 entries.push({
                                     family: ruleFontFamily,
                                     weight: rule.style.getPropertyValue('font-weight') || 'normal',
                                     style: rule.style.getPropertyValue('font-style') || 'normal',
-                                    stretch: rule.style.getPropertyValue('font-stretch') || 'normal',
-                                    unicodeRange: rule.style.getPropertyValue('unicode-range') || 'U+0-10FFFF',
+                                    stretch:
+                                        rule.style.getPropertyValue('font-stretch') || 'normal',
+                                    unicodeRange:
+                                        rule.style.getPropertyValue('unicode-range') ||
+                                        'U+0-10FFFF',
                                     sources: sources
                                 });
                             }
@@ -267,12 +300,16 @@
     async function fetchGoogleFontFaceEntries(googleFontsLinks) {
         const entries = [];
 
-        if (!googleFontsLinks || googleFontsLinks.length === 0) return entries;
+        if (!googleFontsLinks || googleFontsLinks.length === 0) {
+            return entries;
+        }
 
         for (const href of googleFontsLinks) {
             try {
                 const response = await fetch(href);
-                if (!response.ok) continue;
+                if (!response.ok) {
+                    continue;
+                }
                 const cssText = await response.text();
                 // Pass href as baseUrl to resolve relative URLs in the fetched CSS
                 entries.push(...parseFontFaceCss(cssText, href));
@@ -338,13 +375,13 @@
     }
 
     function fetchFontDataViaBackground(url) {
-        return new Promise((resolve) => {
+        return new Promise(resolve => {
             if (!chrome.runtime || !chrome.runtime.sendMessage) {
                 resolve(null);
                 return;
             }
 
-            chrome.runtime.sendMessage({ type: 'FETCH_FONT_DATA', url }, (response) => {
+            chrome.runtime.sendMessage({ type: 'FETCH_FONT_DATA', url }, response => {
                 if (chrome.runtime.lastError) {
                     resolve(null);
                     return;
@@ -368,12 +405,12 @@
     function detectFontFormat(url) {
         const ext = url.split('?')[0].split('.').pop().toLowerCase();
         const formats = {
-            'woff2': 'woff2',
-            'woff': 'woff',
-            'ttf': 'truetype',
-            'otf': 'opentype',
-            'eot': 'embedded-opentype',
-            'svg': 'svg'
+            woff2: 'woff2',
+            woff: 'woff',
+            ttf: 'truetype',
+            otf: 'opentype',
+            eot: 'embedded-opentype',
+            svg: 'svg'
         };
         return formats[ext] || 'woff2';
     }
@@ -388,7 +425,10 @@
         linkTags.forEach(link => {
             const href = link.getAttribute('href');
             // Check if the font name appears in the URL
-            if (href && href.toLowerCase().includes(cleanFontName.toLowerCase().replace(/\s+/g, '+'))) {
+            if (
+                href &&
+                href.toLowerCase().includes(cleanFontName.toLowerCase().replace(/\s+/g, '+'))
+            ) {
                 googleFontsLinks.push(href);
             }
         });
@@ -398,12 +438,21 @@
             for (const sheet of document.styleSheets) {
                 try {
                     const rules = sheet.cssRules || sheet.rules;
-                    if (!rules) continue;
+                    if (!rules) {
+                        continue;
+                    }
 
                     for (const rule of rules) {
-                        if (rule instanceof CSSImportRule && rule.href &&
-                            rule.href.includes('fonts.googleapis.com')) {
-                            if (rule.href.toLowerCase().includes(cleanFontName.toLowerCase().replace(/\s+/g, '+'))) {
+                        if (
+                            rule instanceof CSSImportRule &&
+                            rule.href &&
+                            rule.href.includes('fonts.googleapis.com')
+                        ) {
+                            if (
+                                rule.href
+                                    .toLowerCase()
+                                    .includes(cleanFontName.toLowerCase().replace(/\s+/g, '+'))
+                            ) {
                                 googleFontsLinks.push(rule.href);
                             }
                         }
@@ -443,9 +492,9 @@
         return {
             fontFaceRules: fontFaceRules,
             googleFontsLinks: googleFontsLinks,
-            loadedFonts: loadedFonts,  // FontFace API data
+            loadedFonts: loadedFonts, // FontFace API data
             fontFaceEntries: fontFaceEntries,
-            fontUrls: [...new Set(fontUrls)]  // Deduplicated font URLs
+            fontUrls: [...new Set(fontUrls)] // Deduplicated font URLs
         };
     }
 
@@ -505,7 +554,7 @@
     function findArticleContent() {
         for (const selector of ARTICLE_SELECTORS) {
             const element = document.querySelector(selector);
-            if (element && element.textContent.trim().length > 100) {
+            if (element && element.textContent.trim().length > MIN_ARTICLE_TEXT_LENGTH) {
                 return element;
             }
         }
@@ -532,7 +581,9 @@
             if (element) {
                 structureStyles[tagName] = {
                     properties: extractStyles(element),
-                    sampleText: element.textContent.trim().slice(0, 30) + (element.textContent.length > 30 ? '...' : '')
+                    sampleText:
+                        element.textContent.trim().slice(0, 30) +
+                        (element.textContent.length > 30 ? '...' : '')
                 };
             }
         });
@@ -583,7 +634,7 @@
         exitButton.style.left = 'auto';
         exitButton.style.top = 'auto';
         exitButton.style.background = '#6b7280';
-        exitButton.addEventListener('click', (e) => {
+        exitButton.addEventListener('click', e => {
             e.preventDefault();
             e.stopPropagation();
             exitSelectionMode();
@@ -670,7 +721,9 @@
     }
 
     function countDownloadedFonts(fontResources) {
-        if (!fontResources) return 0;
+        if (!fontResources) {
+            return 0;
+        }
 
         if (Array.isArray(fontResources.capturedFonts)) {
             return fontResources.capturedFonts.filter(f => f.dataUrl).length;
@@ -726,7 +779,9 @@
         e.preventDefault();
         e.stopPropagation();
 
-        if (!capturedStyles) return;
+        if (!capturedStyles) {
+            return;
+        }
 
         // Show loading state
         if (saveButton) {
@@ -763,9 +818,10 @@
         enrichStyleFontsInBackground(
             styleId,
             () => extractFontResourcesAsync(capturedStyles.fontFamily.value),
-            (fontCount) => fontCount > 0
-                ? `Font download complete (${fontCount} font${fontCount > 1 ? 's' : ''})`
-                : 'Font download complete'
+            fontCount =>
+                fontCount > 0
+                    ? `Font download complete (${fontCount} font${fontCount > 1 ? 's' : ''})`
+                    : 'Font download complete'
         );
     }
 
@@ -823,13 +879,16 @@
             async () => {
                 const articleFontResources = {};
                 for (const [tag, data] of Object.entries(structureStyles)) {
-                    articleFontResources[tag] = await extractFontResourcesAsync(data.properties.fontFamily.value);
+                    articleFontResources[tag] = await extractFontResourcesAsync(
+                        data.properties.fontFamily.value
+                    );
                 }
                 return articleFontResources;
             },
-            (fontCount) => fontCount > 0
-                ? `Article fonts ready (${fontCount} font${fontCount > 1 ? 's' : ''})`
-                : 'Article font download complete'
+            fontCount =>
+                fontCount > 0
+                    ? `Article fonts ready (${fontCount} font${fontCount > 1 ? 's' : ''})`
+                    : 'Article font download complete'
         );
     }
 
@@ -879,13 +938,16 @@
             async () => {
                 const articleFontResources = {};
                 for (const [tag, data] of Object.entries(structureStyles)) {
-                    articleFontResources[tag] = await extractFontResourcesAsync(data.properties.fontFamily.value);
+                    articleFontResources[tag] = await extractFontResourcesAsync(
+                        data.properties.fontFamily.value
+                    );
                 }
                 return articleFontResources;
             },
-            (fontCount) => fontCount > 0
-                ? `Article fonts ready (${fontCount} font${fontCount > 1 ? 's' : ''})`
-                : 'Article font download complete'
+            fontCount =>
+                fontCount > 0
+                    ? `Article fonts ready (${fontCount} font${fontCount > 1 ? 's' : ''})`
+                    : 'Article font download complete'
         );
     }
 
@@ -900,13 +962,15 @@
             if (toast.parentNode) {
                 toast.parentNode.removeChild(toast);
             }
-        }, 2500);
+        }, TOAST_DURATION_MS);
     }
 
     // Handle text selection
     function handleMouseUp(e) {
         // Ignore if clicking on our own UI
-        if (e.target.closest('.moji-fu-save-btn')) return;
+        if (e.target.closest('.moji-fu-save-btn')) {
+            return;
+        }
 
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
@@ -923,10 +987,10 @@
 
             capturedStyles = extractStyles(element);
             currentSelection = selectedText;
-            // Save the selected text as sample (truncate if too long)
-            sampleText = selectedText.length > 50
-                ? selectedText.slice(0, 50) + '...'
-                : selectedText;
+            sampleText =
+                selectedText.length > MAX_SAMPLE_TEXT_LENGTH
+                    ? selectedText.slice(0, MAX_SAMPLE_TEXT_LENGTH) + '...'
+                    : selectedText;
 
             // Only show buttons or collect if in selection mode
             if (selectionMode) {
@@ -946,7 +1010,9 @@
 
     // Collect style from current selection
     async function collectStyleFromSelection() {
-        if (!capturedStyles) return;
+        if (!capturedStyles) {
+            return;
+        }
 
         const styleId = generateId();
         const style = {
@@ -977,9 +1043,10 @@
         enrichStyleFontsInBackground(
             styleId,
             () => extractFontResourcesAsync(capturedStyles.fontFamily.value),
-            (fontCount) => fontCount > 0
-                ? `Font download complete (${fontCount} font${fontCount > 1 ? 's' : ''})`
-                : 'Font download complete'
+            fontCount =>
+                fontCount > 0
+                    ? `Font download complete (${fontCount} font${fontCount > 1 ? 's' : ''})`
+                    : 'Font download complete'
         );
 
         window.getSelection().removeAllRanges();
@@ -1016,52 +1083,84 @@
         }
     }
 
-    // Handle clicks outside to dismiss
+    let _eventListenersAttached = false;
+
+    function attachEventListeners() {
+        if (_eventListenersAttached) {
+            return;
+        }
+        _eventListenersAttached = true;
+
+        document.addEventListener('mouseup', handleMouseUp);
+        document.addEventListener('click', handleClick);
+    }
+
+    function cleanup() {
+        _eventListenersAttached = false;
+        removeSaveButton();
+    }
+
     function handleClick(e) {
-        if (saveButton && !e.target.closest('.moji-fu-save-btn') && !e.target.closest('.moji-fu-btn-container')) {
-            // Small delay to allow selection events to complete
+        if (
+            saveButton &&
+            !e.target.closest('.moji-fu-save-btn') &&
+            !e.target.closest('.moji-fu-btn-container')
+        ) {
             setTimeout(() => {
                 const selection = window.getSelection();
                 if (!selection.toString().trim()) {
                     removeSaveButton();
-                    // Don't exit selection mode on click outside - user may want to select different text
                 }
-            }, 10);
+            }, CLICK_DISMISS_DELAY_MS);
         }
     }
 
-    // Listen for messages from popup/background
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.type === 'AUTO_COLLECT_ARTICLE') {
-            autoCollectArticleStyles(sendResponse);
-            return true; // Keep channel open for async response
+    let _messageListener = null;
+
+    function attachMessageListener() {
+        if (_messageListener) {
+            return;
         }
 
-        if (message.type === 'ENABLE_SELECTION_MODE') {
-            enableSelectionMode();
-            sendResponse({ success: true, isActive: true });
-            return true;
-        }
+        _messageListener = (message, sender, sendResponse) => {
+            if (message.type === 'AUTO_COLLECT_ARTICLE') {
+                autoCollectArticleStyles(sendResponse);
+                return true;
+            }
 
-        if (message.type === 'DISABLE_SELECTION_MODE') {
-            exitSelectionMode();
-            sendResponse({ success: true, isActive: false });
-            return true;
-        }
+            if (message.type === 'ENABLE_SELECTION_MODE') {
+                enableSelectionMode();
+                sendResponse({ success: true, isActive: true });
+                return true;
+            }
 
-        if (message.type === 'TOGGLE_SELECTION_MODE') {
-            const isActive = toggleSelectionMode();
-            sendResponse({ success: true, isActive: isActive });
-            return true;
-        }
+            if (message.type === 'DISABLE_SELECTION_MODE') {
+                exitSelectionMode();
+                sendResponse({ success: true, isActive: false });
+                return true;
+            }
 
-        if (message.type === 'GET_SELECTION_MODE_STATE') {
-            sendResponse({ isActive: selectionMode });
-            return true;
-        }
-    });
+            if (message.type === 'TOGGLE_SELECTION_MODE') {
+                const isActive = toggleSelectionMode();
+                sendResponse({ success: true, isActive: isActive });
+                return true;
+            }
 
-    // Initialize
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('click', handleClick);
+            if (message.type === 'GET_SELECTION_MODE_STATE') {
+                sendResponse({ isActive: selectionMode });
+                return true;
+            }
+
+            if (message.type === 'MOJIFU_CLEANUP') {
+                cleanup();
+                sendResponse({ success: true });
+                return true;
+            }
+        };
+
+        chrome.runtime.onMessage.addListener(_messageListener);
+    }
+
+    attachEventListeners();
+    attachMessageListener();
 })();

@@ -3,6 +3,17 @@
 (function () {
     'use strict';
 
+    const MIN_CONTENT_TEXT_LENGTH = 25;
+    const MIN_PARAGRAPH_TEXT_LENGTH = 50;
+    const MIN_PARAGRAPH_WORD_COUNT = 10;
+    const MAX_SELECTOR_DEPTH = 4;
+    const MIN_CANDIDATE_TEXT_LENGTH = 500;
+    const MAX_CANDIDATE_TEXT_LENGTH = 100000;
+    const MAX_DEPTH_PENALTY_START = 8;
+    const MIN_ELEMENT_WIDTH = 300;
+    const MIN_ELEMENT_HEIGHT = 200;
+    const TOAST_DURATION_MS = 2500;
+
     let pickerActive = false;
     let pickerHint = null;
     let currentHighlight = null;
@@ -77,11 +88,17 @@
 
             // Add meaningful classes (skip utility classes and moji-fu classes)
             if (current.className && typeof current.className === 'string') {
-                const classes = current.className.trim().split(/\s+/)
-                    .filter(c => c &&
-                        !c.startsWith('moji-fu-') &&
-                        !c.match(/^(is-|has-|js-|u-|wp-block-)/i) && // Skip utility prefixes
-                        c.length > 2 && c.length < 30) // Skip very short or very long classes
+                const classes = current.className
+                    .trim()
+                    .split(/\s+/)
+                    .filter(
+                        c =>
+                            c &&
+                            !c.startsWith('moji-fu-') &&
+                            !c.match(/^(is-|has-|js-|u-|wp-block-)/i) && // Skip utility prefixes
+                            c.length > 2 &&
+                            c.length < 30
+                    ) // Skip very short or very long classes
                     .slice(0, 2);
                 if (classes.length) {
                     selector += '.' + classes.join('.');
@@ -101,7 +118,9 @@
             current = current.parentElement;
 
             // Stop after building 4 levels deep (usually enough for uniqueness)
-            if (path.length >= 4) break;
+            if (path.length >= MAX_SELECTOR_DEPTH) {
+                break;
+            }
         }
 
         const fullSelector = path.join(' > ');
@@ -124,67 +143,123 @@
     // Positive indicators for main content
     const POSITIVE_PATTERNS = /article|body|content|entry|main|page|post|text|blog|story|prose/i;
     // Negative indicators (UI elements, navigation, ads)
-    const NEGATIVE_PATTERNS = /combx|comment|community|disqus|extra|foot|header|menu|modal|nav|remark|rss|shoutbox|sidebar|sponsor|ad-break|agegate|pagination|pager|popup|tweet|twitter|facebook|social|share|related|recommend|widget|overlay|dialog|banner|promo|newsletter/i;
+    const NEGATIVE_PATTERNS =
+        /combx|comment|community|disqus|extra|foot|header|menu|modal|nav|remark|rss|shoutbox|sidebar|sponsor|ad-break|agegate|pagination|pager|popup|tweet|twitter|facebook|social|share|related|recommend|widget|overlay|dialog|banner|promo|newsletter/i;
     // Elements that are definitely NOT main content
-    const UNLIKELY_TAGS = ['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'APPLET', 'NAV', 'ASIDE', 'HEADER', 'FOOTER', 'FORM', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'];
+    const UNLIKELY_TAGS = [
+        'SCRIPT',
+        'STYLE',
+        'NOSCRIPT',
+        'IFRAME',
+        'OBJECT',
+        'EMBED',
+        'APPLET',
+        'NAV',
+        'ASIDE',
+        'HEADER',
+        'FOOTER',
+        'FORM',
+        'BUTTON',
+        'INPUT',
+        'SELECT',
+        'TEXTAREA'
+    ];
 
     /**
      * Calculate content score for an element using Readability-like heuristics
      */
     function calculateContentScore(element) {
-        if (!element || element.nodeType !== Node.ELEMENT_NODE) return -1;
+        if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+            return -1;
+        }
 
         const tagName = element.tagName;
 
         // Skip unlikely candidates
-        if (UNLIKELY_TAGS.includes(tagName)) return -1;
+        if (UNLIKELY_TAGS.includes(tagName)) {
+            return -1;
+        }
 
         // Skip elements with very little content
         const text = element.textContent || '';
-        if (text.trim().length < 25) return -1;
+        if (text.trim().length < MIN_CONTENT_TEXT_LENGTH) {
+            return -1;
+        }
 
         let score = 0;
 
         // 1. Bonus for semantic article containers
-        if (tagName === 'ARTICLE') score += 30;
-        if (tagName === 'MAIN') score += 25;
-        if (element.getAttribute('role') === 'main') score += 25;
-        if (element.getAttribute('role') === 'article') score += 30;
+        if (tagName === 'ARTICLE') {
+            score += 30;
+        }
+        if (tagName === 'MAIN') {
+            score += 25;
+        }
+        if (element.getAttribute('role') === 'main') {
+            score += 25;
+        }
+        if (element.getAttribute('role') === 'article') {
+            score += 30;
+        }
 
         // 2. Score based on class/id names
         const className = element.className || '';
         const id = element.id || '';
         const classAndId = className + ' ' + id;
 
-        if (POSITIVE_PATTERNS.test(classAndId)) score += 25;
-        if (NEGATIVE_PATTERNS.test(classAndId)) score -= 50;
+        if (POSITIVE_PATTERNS.test(classAndId)) {
+            score += 25;
+        }
+        if (NEGATIVE_PATTERNS.test(classAndId)) {
+            score -= 50;
+        }
 
         // 3. Count paragraphs - articles have multiple paragraphs
         const paragraphs = element.getElementsByTagName('p');
-        const validParagraphs = Array.from(paragraphs).filter(p =>
-            p.textContent.trim().length > 50 &&
-            p.textContent.split(/\s+/).length > 10
+        const validParagraphs = Array.from(paragraphs).filter(
+            p =>
+                p.textContent.trim().length > MIN_PARAGRAPH_TEXT_LENGTH &&
+                p.textContent.split(/\s+/).length > MIN_PARAGRAPH_WORD_COUNT
         );
         score += Math.min(validParagraphs.length * 3, 30); // Up to 30 points for paragraphs
 
         // 4. Text density: ratio of text length to element's HTML length
         const html = element.innerHTML || '';
         const textDensity = text.length / (html.length || 1);
-        if (textDensity > 0.25) score += 15; // Good text density
-        if (textDensity > 0.5) score += 10;  // Very good density
+        if (textDensity > 0.25) {
+            score += 15;
+        } // Good text density
+        if (textDensity > 0.5) {
+            score += 10;
+        } // Very good density
 
         // 5. Link density penalty: too many links = probably navigation
         const links = element.getElementsByTagName('a');
-        const linkText = Array.from(links).reduce((sum, a) => sum + (a.textContent || '').length, 0);
+        const linkText = Array.from(links).reduce(
+            (sum, a) => sum + (a.textContent || '').length,
+            0
+        );
         const linkDensity = linkText / (text.length || 1);
-        if (linkDensity > 0.5) score -= 30; // More than half is links = bad
-        if (linkDensity > 0.3) score -= 15;
+        if (linkDensity > 0.5) {
+            score -= 30;
+        } // More than half is links = bad
+        if (linkDensity > 0.3) {
+            score -= 15;
+        }
 
         // 6. Bonus for containing common article elements
-        if (element.querySelector('h1, h2')) score += 5;
-        if (element.querySelector('blockquote')) score += 3;
-        if (element.querySelector('img')) score += 2;
-        if (element.querySelector('figure')) score += 3;
+        if (element.querySelector('h1, h2')) {
+            score += 5;
+        }
+        if (element.querySelector('blockquote')) {
+            score += 3;
+        }
+        if (element.querySelector('img')) {
+            score += 2;
+        }
+        if (element.querySelector('figure')) {
+            score += 3;
+        }
 
         // 7. Penalty for deeply nested elements (usually not main content)
         let depth = 0;
@@ -193,11 +268,15 @@
             depth++;
             parent = parent.parentElement;
         }
-        if (depth > 8) score -= (depth - 8) * 2;
+        if (depth > MAX_DEPTH_PENALTY_START) {
+            score -= (depth - MAX_DEPTH_PENALTY_START) * 2;
+        }
 
         // 8. Bonus for reasonable size (not too small, not the entire page)
         const rect = element.getBoundingClientRect();
-        if (rect.width > 300 && rect.height > 200) score += 5;
+        if (rect.width > MIN_ELEMENT_WIDTH && rect.height > MIN_ELEMENT_HEIGHT) {
+            score += 5;
+        }
 
         return score;
     }
@@ -260,7 +339,12 @@
             for (const element of candidates) {
                 // Skip very small or very large elements
                 const text = element.textContent || '';
-                if (text.length < 500 || text.length > 100000) continue;
+                if (
+                    text.length < MIN_CANDIDATE_TEXT_LENGTH ||
+                    text.length > MAX_CANDIDATE_TEXT_LENGTH
+                ) {
+                    continue;
+                }
 
                 const score = calculateContentScore(element);
                 if (score > bestScore) {
@@ -276,7 +360,9 @@
             const parentScores = new Map();
 
             paragraphs.forEach(p => {
-                if (p.textContent.trim().length < 50) return;
+                if (p.textContent.trim().length < MIN_PARAGRAPH_TEXT_LENGTH) {
+                    return;
+                }
 
                 let parent = p.parentElement;
                 // Go up max 3 levels to find a good container
@@ -315,7 +401,15 @@
 
         // Smart Apply behavior
         const identityProps = ['fontFamily', 'color', 'textShadow'];
-        const typographyProps = ['fontSize', 'lineHeight', 'fontWeight', 'letterSpacing', 'fontStyle', 'textDecoration', 'textTransform'];
+        const typographyProps = [
+            'fontSize',
+            'lineHeight',
+            'fontWeight',
+            'letterSpacing',
+            'fontStyle',
+            'textDecoration',
+            'textTransform'
+        ];
 
         const identityDecls = [];
         const typographyDecls = [];
@@ -371,13 +465,36 @@
 
         // Separate identity properties (apply to all) from typography properties (element-specific)
         const identityProps = ['fontFamily', 'color', 'textShadow'];
-        const typographyProps = ['fontSize', 'lineHeight', 'fontWeight', 'letterSpacing', 'fontStyle', 'textDecoration', 'textTransform'];
+        const typographyProps = [
+            'fontSize',
+            'lineHeight',
+            'fontWeight',
+            'letterSpacing',
+            'fontStyle',
+            'textDecoration',
+            'textTransform'
+        ];
 
         // Heading fallback hierarchy: lower headings inherit from higher ones
         const headingFallback = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'];
 
         // All text elements that should receive body text styles
-        const bodyTextElements = ['p', 'span', 'li', 'td', 'th', 'blockquote', 'figcaption', 'cite', 'q', 'address', 'dd', 'dt', 'label', 'summary'];
+        const bodyTextElements = [
+            'p',
+            'span',
+            'li',
+            'td',
+            'th',
+            'blockquote',
+            'figcaption',
+            'cite',
+            'q',
+            'address',
+            'dd',
+            'dt',
+            'label',
+            'summary'
+        ];
         const codeElements = ['code', 'pre', 'kbd', 'samp', 'var'];
 
         // 1. First, extract identity properties from P (or first available) for universal application
@@ -443,8 +560,13 @@
                 // First try higher headings (H3 → H2 → H1)
                 for (let j = i - 1; j >= 0; j--) {
                     const higherHeading = headingFallback[j];
-                    if (structureStyles[higherHeading] || structureStyles[higherHeading.toLowerCase()]) {
-                        fallbackStyle = structureStyles[higherHeading] || structureStyles[higherHeading.toLowerCase()];
+                    if (
+                        structureStyles[higherHeading] ||
+                        structureStyles[higherHeading.toLowerCase()]
+                    ) {
+                        fallbackStyle =
+                            structureStyles[higherHeading] ||
+                            structureStyles[higherHeading.toLowerCase()];
                         break;
                     }
                 }
@@ -453,8 +575,13 @@
                 if (!fallbackStyle) {
                     for (let j = i + 1; j < headingFallback.length; j++) {
                         const lowerHeading = headingFallback[j];
-                        if (structureStyles[lowerHeading] || structureStyles[lowerHeading.toLowerCase()]) {
-                            fallbackStyle = structureStyles[lowerHeading] || structureStyles[lowerHeading.toLowerCase()];
+                        if (
+                            structureStyles[lowerHeading] ||
+                            structureStyles[lowerHeading.toLowerCase()]
+                        ) {
+                            fallbackStyle =
+                                structureStyles[lowerHeading] ||
+                                structureStyles[lowerHeading.toLowerCase()];
                             break;
                         }
                     }
@@ -468,7 +595,9 @@
                         }
                     }
                     if (fallbackDecls.length > 0) {
-                        rules.push(`${baseSelector} ${heading.toLowerCase()} { ${fallbackDecls.join('; ')}; }`);
+                        rules.push(
+                            `${baseSelector} ${heading.toLowerCase()} { ${fallbackDecls.join('; ')}; }`
+                        );
                     }
                 }
             }
@@ -504,9 +633,7 @@
 
     // Generate @font-face rule from loaded font data
     function generateFontFaceRule(fontData, sourceUrl) {
-        const src = sourceUrl.startsWith('data:')
-            ? `url("${sourceUrl}")`
-            : `url("${sourceUrl}")`;
+        const src = sourceUrl.startsWith('data:') ? `url("${sourceUrl}")` : `url("${sourceUrl}")`;
 
         return `@font-face {
             font-family: "${fontData.family}";
@@ -522,9 +649,11 @@
         const familyNeedle = `font-family: "${fontData.family}"`;
         const weightNeedle = `font-weight: ${fontData.weight}`;
         const styleNeedle = `font-style: ${fontData.style}`;
-        return existingRules.includes(familyNeedle) &&
+        return (
+            existingRules.includes(familyNeedle) &&
             existingRules.includes(weightNeedle) &&
-            existingRules.includes(styleNeedle);
+            existingRules.includes(styleNeedle)
+        );
     }
 
     function buildFontFaceRulesFromDescriptors(descriptors, capturedFonts, existingRulesText) {
@@ -539,9 +668,13 @@
         });
 
         descriptors.forEach(descriptor => {
-            if (!descriptor || !descriptor.family) return;
+            if (!descriptor || !descriptor.family) {
+                return;
+            }
             const sources = descriptor.sources || [];
-            if (sources.length === 0) return;
+            if (sources.length === 0) {
+                return;
+            }
 
             let sourceUrl = sources[0];
             for (const source of sources) {
@@ -560,7 +693,9 @@
             };
 
             const key = `${fontData.family}|${fontData.weight}|${fontData.style}|${sourceUrl}`;
-            if (seen.has(key)) return;
+            if (seen.has(key)) {
+                return;
+            }
             seen.add(key);
 
             if (!hasFontFaceRule(existingRulesText + rules.join('\n'), fontData)) {
@@ -574,11 +709,16 @@
     // Inject font resources (Google Fonts links and @font-face rules)
     // Enhanced to handle captured font data and Font Loading API metadata
     function injectFontResources(fontResources) {
-        if (!fontResources) return;
+        if (!fontResources) {
+            return;
+        }
 
         // For article styles, fontResources is an object with keys being tag names
-        const isArticleStyle = typeof fontResources === 'object' &&
-            Object.keys(fontResources).some(key => ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BLOCKQUOTE', 'LI'].includes(key));
+        const isArticleStyle =
+            typeof fontResources === 'object' &&
+            Object.keys(fontResources).some(key =>
+                ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BLOCKQUOTE', 'LI'].includes(key)
+            );
 
         let allGoogleFontsLinks = [];
         let allFontFaceRules = [];
@@ -678,7 +818,12 @@
 
         // If we still have font URLs but no other data, try to load them directly
         // This is a last resort for cross-origin fonts
-        if (allFontUrls.length > 0 && allFontFaceRules.length === 0 && allLoadedFonts.length === 0 && allFontFaceEntries.length === 0) {
+        if (
+            allFontUrls.length > 0 &&
+            allFontFaceRules.length === 0 &&
+            allLoadedFonts.length === 0 &&
+            allFontFaceEntries.length === 0
+        ) {
             console.log('Style Copier: Attempting to load fonts from URLs:', allFontUrls);
             allFontUrls.forEach(url => {
                 // Create a basic @font-face rule with the URL
@@ -704,7 +849,10 @@
             const filename = pathname.split('/').pop();
             // Remove extension and common suffixes
             let name = filename.replace(/\.(woff2?|ttf|otf|eot|svg)$/i, '');
-            name = name.replace(/[-_](regular|bold|italic|light|medium|semibold|thin|black|condensed)/gi, ' $1');
+            name = name.replace(
+                /[-_](regular|bold|italic|light|medium|semibold|thin|black|condensed)/gi,
+                ' $1'
+            );
             return name.trim() || null;
         } catch (e) {
             return null;
@@ -713,7 +861,7 @@
 
     // Apply saved styles for current page
     function applyStoredStyles() {
-        chrome.storage.local.get(['appliedRules'], (result) => {
+        chrome.storage.local.get(['appliedRules'], result => {
             const rules = result.appliedRules || [];
             const currentUrl = window.location.href;
 
@@ -726,7 +874,9 @@
                 return currentUrl === rule.urlPattern;
             });
 
-            if (matchingRules.length === 0) return;
+            if (matchingRules.length === 0) {
+                return;
+            }
 
             // Fetch savedStyles from IndexedDB
             MojiFuStorage.getSavedStyles().then(styles => {
@@ -743,10 +893,12 @@
 
                         if (style.type === 'article' && style.structureStyles) {
                             // Article structure style - apply different rules per element type
-                            css += buildArticleCssRules(rule.selector, style.structureStyles) + '\n';
+                            css +=
+                                buildArticleCssRules(rule.selector, style.structureStyles) + '\n';
                         } else if (style.properties) {
                             // Single element style
-                            css += buildCssRule(rule.selector, style.properties, rule.options) + '\n';
+                            css +=
+                                buildCssRule(rule.selector, style.properties, rule.options) + '\n';
                         }
                     }
                 });
@@ -801,7 +953,9 @@
 
     // Handle hover during picker mode
     function handleMouseOver(e) {
-        if (!pickerActive) return;
+        if (!pickerActive) {
+            return;
+        }
 
         if (currentHighlight) {
             currentHighlight.classList.remove('moji-fu-highlight');
@@ -815,8 +969,12 @@
 
     // Handle click during picker mode
     function handlePickerClick(e) {
-        if (!pickerActive) return;
-        if (e.target.closest('.moji-fu-picker-hint')) return;
+        if (!pickerActive) {
+            return;
+        }
+        if (e.target.closest('.moji-fu-picker-hint')) {
+            return;
+        }
 
         e.preventDefault();
         e.stopPropagation();
@@ -831,27 +989,36 @@
             smartApply: !isHeading
         };
 
-        saveAndApplyStyle(pendingStyleId, selector, urlPattern, () => {
-            exitPickerMode();
-        }, options);
+        saveAndApplyStyle(
+            pendingStyleId,
+            selector,
+            urlPattern,
+            () => {
+                exitPickerMode();
+            },
+            options
+        );
     }
 
     // Save rule and apply style immediately
     function saveAndApplyStyle(styleId, selector, urlPattern, callback, options = {}) {
         // Read both appliedRules (chrome.storage) and savedStyles (IndexedDB)
-        chrome.storage.local.get(['appliedRules'], (result) => {
+        chrome.storage.local.get(['appliedRules'], result => {
             const rules = result.appliedRules || [];
 
             // Check for duplicate rule (same styleId + selector + urlPattern)
-            const isDuplicate = rules.some(rule =>
-                rule.styleId === styleId &&
-                rule.selector === selector &&
-                rule.urlPattern === urlPattern
+            const isDuplicate = rules.some(
+                rule =>
+                    rule.styleId === styleId &&
+                    rule.selector === selector &&
+                    rule.urlPattern === urlPattern
             );
 
             if (isDuplicate) {
                 showToast('Style already applied to this element!');
-                if (callback) callback();
+                if (callback) {
+                    callback();
+                }
                 return;
             }
 
@@ -883,16 +1050,20 @@
 
                         if (style.type === 'article' && style.structureStyles) {
                             // Article structure style
-                            styleEl.textContent += buildArticleCssRules(selector, style.structureStyles) + '\n';
+                            styleEl.textContent +=
+                                buildArticleCssRules(selector, style.structureStyles) + '\n';
                         } else if (style.properties) {
                             // Single element style
                             const options = rules.length ? rules[0].options : {}; // Use options from the rule we just saved
-                            styleEl.textContent += buildCssRule(selector, style.properties, options) + '\n';
+                            styleEl.textContent +=
+                                buildCssRule(selector, style.properties, options) + '\n';
                         }
                     }
 
                     showToast('Style applied!');
-                    if (callback) callback();
+                    if (callback) {
+                        callback();
+                    }
                 });
             });
         });
@@ -929,23 +1100,25 @@
     function getAppliedRulesForCurrentPage(sendResponse) {
         const currentUrl = window.location.href;
 
-        chrome.storage.local.get(['appliedRules'], (result) => {
+        chrome.storage.local.get(['appliedRules'], result => {
             const rules = result.appliedRules || [];
 
             MojiFuStorage.getSavedStyles().then(styles => {
-                const matchingRules = rules.filter(rule => {
-                    if (rule.urlPattern.endsWith('*')) {
-                        const prefix = rule.urlPattern.slice(0, -1);
-                        return currentUrl.startsWith(prefix);
-                    }
-                    return currentUrl === rule.urlPattern;
-                }).map(rule => {
-                    const style = styles.find(s => s.id === rule.styleId);
-                    return {
-                        ...rule,
-                        styleName: style ? style.name : 'Unknown'
-                    };
-                });
+                const matchingRules = rules
+                    .filter(rule => {
+                        if (rule.urlPattern.endsWith('*')) {
+                            const prefix = rule.urlPattern.slice(0, -1);
+                            return currentUrl.startsWith(prefix);
+                        }
+                        return currentUrl === rule.urlPattern;
+                    })
+                    .map(rule => {
+                        const style = styles.find(s => s.id === rule.styleId);
+                        return {
+                            ...rule,
+                            styleName: style ? style.name : 'Unknown'
+                        };
+                    });
 
                 sendResponse({ rules: matchingRules, url: currentUrl });
             });
@@ -954,7 +1127,7 @@
 
     // Remove an applied rule
     function removeAppliedRule(ruleId, sendResponse) {
-        chrome.storage.local.get(['appliedRules'], (result) => {
+        chrome.storage.local.get(['appliedRules'], result => {
             const rules = (result.appliedRules || []).filter(r => r.id !== ruleId);
             chrome.storage.local.set({ appliedRules: rules }, () => {
                 // Refresh styles on page
@@ -979,30 +1152,59 @@
             if (toast.parentNode) {
                 toast.parentNode.removeChild(toast);
             }
-        }, 2500);
+        }, TOAST_DURATION_MS);
     }
 
-    // Listen for messages from popup/background
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message.type === 'START_PICKER') {
-            enterPickerMode(message.styleId);
-        }
-        if (message.type === 'QUICK_APPLY') {
-            quickApplyToArticle(message.styleId);
-        }
-        if (message.type === 'GET_APPLIED_RULES') {
-            getAppliedRulesForCurrentPage(sendResponse);
-            return true; // Keep channel open for async response
-        }
-        if (message.type === 'REMOVE_APPLIED_RULE') {
-            removeAppliedRule(message.ruleId, sendResponse);
-            return true;
-        }
-    });
+    let _eventListenersAttached = false;
 
-    // Event listeners for picker mode
-    document.addEventListener('mouseover', handleMouseOver);
-    document.addEventListener('click', handlePickerClick, true);
+    function attachEventListeners() {
+        if (_eventListenersAttached) {
+            return;
+        }
+        _eventListenersAttached = true;
+        document.addEventListener('mouseover', handleMouseOver);
+        document.addEventListener('click', handlePickerClick, true);
+    }
+
+    function cleanup() {
+        _eventListenersAttached = false;
+        exitPickerMode();
+    }
+
+    let _messageListener = null;
+
+    function attachMessageListener() {
+        if (_messageListener) {
+            return;
+        }
+
+        _messageListener = (message, sender, sendResponse) => {
+            if (message.type === 'START_PICKER') {
+                enterPickerMode(message.styleId);
+            }
+            if (message.type === 'QUICK_APPLY') {
+                quickApplyToArticle(message.styleId);
+            }
+            if (message.type === 'GET_APPLIED_RULES') {
+                getAppliedRulesForCurrentPage(sendResponse);
+                return true;
+            }
+            if (message.type === 'REMOVE_APPLIED_RULE') {
+                removeAppliedRule(message.ruleId, sendResponse);
+                return true;
+            }
+            if (message.type === 'MOJIFU_CLEANUP') {
+                cleanup();
+                sendResponse({ success: true });
+                return true;
+            }
+        };
+
+        chrome.runtime.onMessage.addListener(_messageListener);
+    }
+
+    attachEventListeners();
+    attachMessageListener();
 
     // Apply stored styles on page load
     if (document.readyState === 'loading') {

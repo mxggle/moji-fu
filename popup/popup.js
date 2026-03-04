@@ -78,9 +78,9 @@
 
     // Load applied rules for current page
     function loadAppliedRules() {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
             if (tabs[0]) {
-                chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_APPLIED_RULES' }, (response) => {
+                chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_APPLIED_RULES' }, response => {
                     if (chrome.runtime.lastError) {
                         appliedEmpty.style.display = 'block';
                         appliedEmpty.innerHTML = '<p>Cannot access this page.</p>';
@@ -98,11 +98,16 @@
 
     // Inject font resources into the popup for previews
     function injectFontResourcesForPreview(fontResources) {
-        if (!fontResources) return;
+        if (!fontResources) {
+            return;
+        }
 
         // For article styles, fontResources is an object with keys being tag names
-        const isArticleStyle = typeof fontResources === 'object' &&
-            Object.keys(fontResources).some(key => ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BLOCKQUOTE', 'LI'].includes(key));
+        const isArticleStyle =
+            typeof fontResources === 'object' &&
+            Object.keys(fontResources).some(key =>
+                ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BLOCKQUOTE', 'LI'].includes(key)
+            );
 
         let allGoogleFontsLinks = [];
         let allFontFaceRules = [];
@@ -171,31 +176,35 @@
         }
 
         emptyState.style.display = 'none';
-        styleList.innerHTML = savedStyles.map(style => {
-            // Inject font resources so preview shows correct fonts
-            if (style.fontResources) {
-                injectFontResourcesForPreview(style.fontResources);
-            }
+        styleList.innerHTML = savedStyles
+            .map(style => {
+                // Inject font resources so preview shows correct fonts
+                if (style.fontResources) {
+                    injectFontResourcesForPreview(style.fontResources);
+                }
 
-            const isArticle = style.type === 'article';
-            const isDownloading = style.downloadStatus === 'downloading';
-            const isFailed = style.downloadStatus === 'failed';
-            const typeBadge = isArticle
-                ? '<span class="type-badge article-badge">Article</span>'
-                : '<span class="type-badge single-badge">Single</span>';
-            const loadingBadge = isDownloading
-                ? '<span class="download-badge"><span class="spinner"></span>Downloading fonts...</span>'
-                : (isFailed ? '<span class="download-badge failed">Font download failed</span>' : '');
+                const isArticle = style.type === 'article';
+                const isDownloading = style.downloadStatus === 'downloading';
+                const isFailed = style.downloadStatus === 'failed';
+                const typeBadge = isArticle
+                    ? '<span class="type-badge article-badge">Article</span>'
+                    : '<span class="type-badge single-badge">Single</span>';
+                const loadingBadge = isDownloading
+                    ? '<span class="download-badge"><span class="spinner"></span>Downloading fonts...</span>'
+                    : isFailed
+                      ? '<span class="download-badge failed">Font download failed</span>'
+                      : '';
 
-            if (isArticle) {
-                // Article structure style display
-                const elementPreviews = Object.entries(style.structureStyles || {})
-                    .map(([tag, data]) => {
-                        const previewStyle = buildInlineStyle(data.properties);
-                        return `<div class="element-preview"><span class="element-tag">${tag}</span><span class="styled-sample" style="${previewStyle}">${escapeHtml(data.sampleText)}</span></div>`;
-                    }).join('');
+                if (isArticle) {
+                    // Article structure style display
+                    const elementPreviews = Object.entries(style.structureStyles || {})
+                        .map(([tag, data]) => {
+                            const previewStyle = buildInlineStyle(data.properties);
+                            return `<div class="element-preview"><span class="element-tag">${tag}</span><span class="styled-sample" style="${previewStyle}">${escapeHtml(data.sampleText)}</span></div>`;
+                        })
+                        .join('');
 
-                return `
+                    return `
                     <li class="style-item" data-id="${style.id}">
                         <div class="style-header">
                             ${typeBadge}
@@ -218,9 +227,9 @@
                         </div>
                     </li>
                 `;
-            } else {
-                // Single element style display (original)
-                return `
+                } else {
+                    // Single element style display (original)
+                    return `
                     <li class="style-item" data-id="${style.id}">
                         <div class="style-header">
                             ${typeBadge}
@@ -243,8 +252,9 @@
                         </div>
                     </li>
                 `;
-            }
-        }).join('');
+                }
+            })
+            .join('');
 
         // Attach event listeners
         styleList.querySelectorAll('.edit-btn').forEach(btn => {
@@ -272,33 +282,35 @@
         appliedEmpty.style.display = 'none';
         // Reverse to show most recent on top (since we use unshift when adding)
         const displayRules = [...appliedRules].reverse();
-        appliedList.innerHTML = displayRules.map(rule => {
-            const style = savedStyles.find(s => s.id === rule.styleId);
-            const isArticle = style && style.type === 'article';
-            const typeBadge = isArticle
-                ? '<span class="type-badge article-badge">Article</span>'
-                : '<span class="type-badge single-badge">Single</span>';
+        appliedList.innerHTML = displayRules
+            .map(rule => {
+                const style = savedStyles.find(s => s.id === rule.styleId);
+                const isArticle = style && style.type === 'article';
+                const typeBadge = isArticle
+                    ? '<span class="type-badge article-badge">Article</span>'
+                    : '<span class="type-badge single-badge">Single</span>';
 
-            let previewHtml = '';
-            if (style) {
-                // Inject font resources so preview shows correct fonts
-                if (style.fontResources) {
-                    injectFontResourcesForPreview(style.fontResources);
+                let previewHtml = '';
+                if (style) {
+                    // Inject font resources so preview shows correct fonts
+                    if (style.fontResources) {
+                        injectFontResourcesForPreview(style.fontResources);
+                    }
+
+                    if (isArticle && style.structureStyles) {
+                        const elementPreviews = Object.entries(style.structureStyles)
+                            .map(([tag, data]) => {
+                                const previewStyle = buildInlineStyle(data.properties);
+                                return `<div class="element-preview"><span class="element-tag">${tag}</span><span class="styled-sample" style="${previewStyle}">${escapeHtml(data.sampleText)}</span></div>`;
+                            })
+                            .join('');
+                        previewHtml = `<div class="article-preview">${elementPreviews}</div>`;
+                    } else if (style.properties) {
+                        previewHtml = `<div class="preview-text" style="${buildInlineStyle(style.properties)}">${escapeHtml(style.sampleText || 'Sample Text')}</div>`;
+                    }
                 }
 
-                if (isArticle && style.structureStyles) {
-                    const elementPreviews = Object.entries(style.structureStyles)
-                        .map(([tag, data]) => {
-                            const previewStyle = buildInlineStyle(data.properties);
-                            return `<div class="element-preview"><span class="element-tag">${tag}</span><span class="styled-sample" style="${previewStyle}">${escapeHtml(data.sampleText)}</span></div>`;
-                        }).join('');
-                    previewHtml = `<div class="article-preview">${elementPreviews}</div>`;
-                } else if (style.properties) {
-                    previewHtml = `<div class="preview-text" style="${buildInlineStyle(style.properties)}">${escapeHtml(style.sampleText || 'Sample Text')}</div>`;
-                }
-            }
-
-            return `
+                return `
                 <li class="style-item applied-item" data-id="${rule.id}" data-style-id="${rule.styleId}">
                     <div class="style-header">
                         ${typeBadge}
@@ -319,7 +331,8 @@
                     </div>
                 </li>
             `;
-        }).join('');
+            })
+            .join('');
 
         // Attach remove listeners
         appliedList.querySelectorAll('.remove-rule-btn').forEach(btn => {
@@ -336,11 +349,15 @@
     function handleRemoveRule(e) {
         const id = e.target.closest('.applied-item').dataset.id;
 
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
             if (tabs[0]) {
-                chrome.tabs.sendMessage(tabs[0].id, { type: 'REMOVE_APPLIED_RULE', ruleId: id }, () => {
-                    loadAppliedRules();
-                });
+                chrome.tabs.sendMessage(
+                    tabs[0].id,
+                    { type: 'REMOVE_APPLIED_RULE', ruleId: id },
+                    () => {
+                        loadAppliedRules();
+                    }
+                );
             }
         });
     }
@@ -361,9 +378,12 @@
     function truncateUrl(url) {
         try {
             const urlObj = new URL(url);
-            return urlObj.hostname + (urlObj.pathname.length > 20
-                ? urlObj.pathname.slice(0, 20) + '...'
-                : urlObj.pathname);
+            return (
+                urlObj.hostname +
+                (urlObj.pathname.length > 20
+                    ? urlObj.pathname.slice(0, 20) + '...'
+                    : urlObj.pathname)
+            );
         } catch {
             return url.slice(0, 40) + '...';
         }
@@ -381,10 +401,24 @@
         return div.innerHTML;
     }
 
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText =
+            'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#27ae60;color:#fff;padding:12px 20px;border-radius:6px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.2);';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 2500);
+    }
+
     // Get appropriate editor type for a CSS property
     function getEditorType(prop) {
         switch (prop) {
-            case 'color': return 'color';
+            case 'color':
+                return 'color';
             case 'fontWeight':
             case 'fontStyle':
             case 'textTransform':
@@ -398,7 +432,19 @@
     function getSelectOptions(prop) {
         switch (prop) {
             case 'fontWeight':
-                return ['normal', 'bold', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
+                return [
+                    'normal',
+                    'bold',
+                    '100',
+                    '200',
+                    '300',
+                    '400',
+                    '500',
+                    '600',
+                    '700',
+                    '800',
+                    '900'
+                ];
             case 'fontStyle':
                 return ['normal', 'italic', 'oblique'];
             case 'textTransform':
@@ -410,7 +456,9 @@
 
     // Helper to convert color values to hex for the color input
     function toHexColor(color) {
-        if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+        if (/^#[0-9a-f]{6}$/i.test(color)) {
+            return color;
+        }
         if (/^#[0-9a-f]{3}$/i.test(color)) {
             return '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3];
         }
@@ -421,14 +469,21 @@
         document.body.removeChild(temp);
         const match = computed.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
         if (match) {
-            return '#' + [match[1], match[2], match[3]].map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
+            return (
+                '#' +
+                [match[1], match[2], match[3]]
+                    .map(n => parseInt(n).toString(16).padStart(2, '0'))
+                    .join('')
+            );
         }
         return '#000000';
     }
 
     // Start inline editing of a property value
     function startEditValue(el, prop, tag) {
-        if (el.querySelector('.property-value-editor')) return;
+        if (el.querySelector('.property-value-editor')) {
+            return;
+        }
 
         const currentValue = tag
             ? editingProperties[tag].properties[prop].value
@@ -456,22 +511,37 @@
                 textInput.value = colorInput.value;
             });
             textInput.addEventListener('input', () => {
-                try { colorInput.value = toHexColor(textInput.value); } catch (e) { /* ignore */ }
+                try {
+                    colorInput.value = toHexColor(textInput.value);
+                } catch (e) {
+                    /* ignore */
+                }
             });
 
             const commit = () => commitEditValue(prop, textInput.value, tag);
 
-            textInput.addEventListener('blur', (e) => {
-                if (e.relatedTarget === colorInput) return;
+            textInput.addEventListener('blur', e => {
+                if (e.relatedTarget === colorInput) {
+                    return;
+                }
                 commit();
             });
-            colorInput.addEventListener('blur', (e) => {
-                if (e.relatedTarget === textInput) return;
+            colorInput.addEventListener('blur', e => {
+                if (e.relatedTarget === textInput) {
+                    return;
+                }
                 commit();
             });
-            textInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') { e.preventDefault(); commit(); }
-                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); revertEditValue(el, currentValue); }
+            textInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commit();
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    revertEditValue(el, currentValue);
+                }
             });
 
             wrapper.appendChild(colorInput);
@@ -487,14 +557,20 @@
                 const option = document.createElement('option');
                 option.value = opt;
                 option.textContent = opt;
-                if (opt === currentValue) option.selected = true;
+                if (opt === currentValue) {
+                    option.selected = true;
+                }
                 select.appendChild(option);
             });
 
             select.addEventListener('change', () => commitEditValue(prop, select.value, tag));
             select.addEventListener('blur', () => commitEditValue(prop, select.value, tag));
-            select.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); revertEditValue(el, currentValue); }
+            select.addEventListener('keydown', e => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    revertEditValue(el, currentValue);
+                }
             });
 
             el.appendChild(select);
@@ -506,9 +582,16 @@
             input.value = currentValue;
 
             input.addEventListener('blur', () => commitEditValue(prop, input.value, tag));
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') { e.preventDefault(); commitEditValue(prop, input.value, tag); }
-                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); revertEditValue(el, currentValue); }
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitEditValue(prop, input.value, tag);
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    revertEditValue(el, currentValue);
+                }
             });
 
             el.appendChild(input);
@@ -551,7 +634,9 @@
         const item = e.target.closest('.style-item');
         const id = item.dataset.styleId || item.dataset.id;
         const style = savedStyles.find(s => s.id === id);
-        if (!style) return;
+        if (!style) {
+            return;
+        }
 
         editingStyleId = id;
         editingType = style.type || 'single';
@@ -560,7 +645,10 @@
             // For article styles, show structure editing
             editingProperties = JSON.parse(JSON.stringify(style.structureStyles));
             editPreview.innerHTML = Object.entries(editingProperties)
-                .map(([tag, data]) => `<div class="edit-element-preview" data-tag="${tag}"><strong>${tag}:</strong> <span style="${buildInlineStyle(data.properties)}">${escapeHtml(data.sampleText)}</span></div>`)
+                .map(
+                    ([tag, data]) =>
+                        `<div class="edit-element-preview" data-tag="${tag}"><strong>${tag}:</strong> <span style="${buildInlineStyle(data.properties)}">${escapeHtml(data.sampleText)}</span></div>`
+                )
                 .join('');
             renderArticleEditModal();
         } else {
@@ -576,7 +664,9 @@
 
     // Render edit modal property list for single element
     function renderEditModal() {
-        propertyList.innerHTML = Object.entries(editingProperties).map(([prop, data]) => `
+        propertyList.innerHTML = Object.entries(editingProperties)
+            .map(
+                ([prop, data]) => `
             <li class="property-item">
                 <div class="property-info">
                     <div class="property-name">${PROP_LABELS[prop]}</div>
@@ -587,7 +677,9 @@
                     <span class="toggle-slider"></span>
                 </label>
             </li>
-        `).join('');
+        `
+            )
+            .join('');
 
         propertyList.querySelectorAll('input[type="checkbox"]').forEach(input => {
             input.addEventListener('change', handleToggle);
@@ -656,7 +748,10 @@
     // Update article edit preview
     function updateArticleEditPreview() {
         editPreview.innerHTML = Object.entries(editingProperties)
-            .map(([tag, data]) => `<div class="edit-element-preview" data-tag="${tag}"><strong>${tag}:</strong> <span style="${buildInlineStyle(data.properties)}">${escapeHtml(data.sampleText)}</span></div>`)
+            .map(
+                ([tag, data]) =>
+                    `<div class="edit-element-preview" data-tag="${tag}"><strong>${tag}:</strong> <span style="${buildInlineStyle(data.properties)}">${escapeHtml(data.sampleText)}</span></div>`
+            )
             .join('');
     }
 
@@ -683,7 +778,9 @@
     // Save edited style
     function saveEdit() {
         const idx = savedStyles.findIndex(s => s.id === editingStyleId);
-        if (idx === -1) return;
+        if (idx === -1) {
+            return;
+        }
 
         if (editingType === 'article') {
             savedStyles[idx].structureStyles = editingProperties;
@@ -691,30 +788,49 @@
             savedStyles[idx].properties = editingProperties;
         }
 
-        MojiFuStorage.setSavedStyles(savedStyles).then(() => {
-            renderStyleList();
-            closeModal();
-        }).catch(err => {
-            console.error('Error saving edited style:', err);
-        });
+        MojiFuStorage.setSavedStyles(savedStyles)
+            .then(() => {
+                renderStyleList();
+                closeModal();
+            })
+            .catch(err => {
+                console.error('Error saving edited style:', err);
+            });
     }
 
-    // Handle delete button click
     function handleDelete(e) {
         const id = getStyleId(e.target);
 
-        // Read fresh from storage before writing to avoid race conditions
-        // with background font-download writes that could resurrect deleted items
-        MojiFuStorage.getSavedStyles().then(freshStyles => {
-            freshStyles = freshStyles.filter(s => s.id !== id);
-            savedStyles = freshStyles;
+        const MAX_DELETE_RETRIES = 3;
 
-            return MojiFuStorage.setSavedStyles(freshStyles);
-        }).then(() => {
-            renderStyleList();
-        }).catch(err => {
-            console.error('Delete failed:', err);
-        });
+        function tryDelete(retryCount = 0) {
+            return MojiFuStorage.getSavedStyles().then(freshStyles => {
+                const filtered = freshStyles.filter(s => s.id !== id);
+                savedStyles = filtered;
+
+                return MojiFuStorage.setSavedStyles(filtered).catch(err => {
+                    if (
+                        err.message === 'CONCURRENT_MODIFICATION' &&
+                        retryCount < MAX_DELETE_RETRIES
+                    ) {
+                        console.warn(
+                            `Delete: Retry ${retryCount + 1}/${MAX_DELETE_RETRIES} due to concurrent modification`
+                        );
+                        return tryDelete(retryCount + 1);
+                    }
+                    throw err;
+                });
+            });
+        }
+
+        tryDelete()
+            .then(() => {
+                renderStyleList();
+            })
+            .catch(err => {
+                console.error('Delete failed after retries:', err);
+                showToast('Failed to delete style. Please try again.');
+            });
     }
 
     // Handle apply button click
@@ -740,43 +856,51 @@
     const selectionCollectBtn = document.getElementById('selection-collect-btn');
     if (selectionCollectBtn) {
         // Check current selection mode state when popup opens
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
             if (tabs[0]) {
-                chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_SELECTION_MODE_STATE' }, (response) => {
-                    if (chrome.runtime.lastError) {
-                        return; // Can't access page
+                chrome.tabs.sendMessage(
+                    tabs[0].id,
+                    { type: 'GET_SELECTION_MODE_STATE' },
+                    response => {
+                        if (chrome.runtime.lastError) {
+                            return; // Can't access page
+                        }
+                        if (response && response.isActive) {
+                            selectionCollectBtn.textContent = '✕ Exit Select';
+                            selectionCollectBtn.classList.add('btn-active');
+                        }
                     }
-                    if (response && response.isActive) {
-                        selectionCollectBtn.textContent = '✕ Exit Select';
-                        selectionCollectBtn.classList.add('btn-active');
-                    }
-                });
+                );
             }
         });
 
         // Toggle selection mode on click
         selectionCollectBtn.addEventListener('click', () => {
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
                 if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { type: 'TOGGLE_SELECTION_MODE' }, (response) => {
-                        if (chrome.runtime.lastError) {
-                            // Show error state briefly
-                            selectionCollectBtn.textContent = '❌ Failed';
-                            setTimeout(() => {
-                                selectionCollectBtn.textContent = '✨ Select Text';
-                            }, 1500);
-                            return;
-                        }
+                    chrome.tabs.sendMessage(
+                        tabs[0].id,
+                        { type: 'TOGGLE_SELECTION_MODE' },
+                        response => {
+                            if (chrome.runtime.lastError) {
+                                // Show error state briefly
+                                selectionCollectBtn.textContent = '❌ Failed';
+                                setTimeout(() => {
+                                    selectionCollectBtn.textContent = '✨ Select Text';
+                                }, 1500);
+                                return;
+                            }
 
-                        if (response && response.isActive) {
-                            // Selection mode is now ON - close popup to let user select
-                            window.close();
-                        } else {
-                            // Selection mode is now OFF - update button
-                            selectionCollectBtn.textContent = '✨ Select Text';
-                            selectionCollectBtn.classList.remove('btn-active');
+                            if (response && response.isActive) {
+                                // Selection mode is now ON - close popup to let user select
+                                window.close();
+                            } else {
+                                // Selection mode is now OFF - update button
+                                selectionCollectBtn.textContent = '✨ Select Text';
+                                selectionCollectBtn.classList.remove('btn-active');
+                            }
                         }
-                    });
+                    );
                 }
             });
         });
@@ -789,49 +913,59 @@
             autoCollectBtn.disabled = true;
             autoCollectBtn.textContent = 'Collecting...';
 
-            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
                 if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, { type: 'AUTO_COLLECT_ARTICLE' }, (response) => {
-                        autoCollectBtn.disabled = false;
-                        autoCollectBtn.textContent = '📄 Collect';
+                    chrome.tabs.sendMessage(
+                        tabs[0].id,
+                        { type: 'AUTO_COLLECT_ARTICLE' },
+                        response => {
+                            autoCollectBtn.disabled = false;
+                            autoCollectBtn.textContent = '📄 Collect';
 
-                        if (chrome.runtime.lastError) {
-                            // Show error state briefly
-                            autoCollectBtn.textContent = '❌ Failed';
-                            setTimeout(() => {
-                                autoCollectBtn.textContent = '📄 Collect';
-                            }, 1500);
-                            return;
-                        }
+                            if (chrome.runtime.lastError) {
+                                // Show error state briefly
+                                autoCollectBtn.textContent = '❌ Failed';
+                                setTimeout(() => {
+                                    autoCollectBtn.textContent = '📄 Collect';
+                                }, 1500);
+                                return;
+                            }
 
-                        if (response && response.success) {
-                            autoCollectBtn.textContent = response.started ? '✓ Queued' : '✓ Collected!';
-                            setTimeout(() => {
-                                autoCollectBtn.textContent = '📄 Collect';
-                            }, 1200);
-                            loadStyles();
+                            if (response && response.success) {
+                                autoCollectBtn.textContent = response.started
+                                    ? '✓ Queued'
+                                    : '✓ Collected!';
+                                setTimeout(() => {
+                                    autoCollectBtn.textContent = '📄 Collect';
+                                }, 1200);
+                                loadStyles();
+                            }
                         }
-                    });
+                    );
                 }
             });
         });
     }
 
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && !editModal.classList.contains('hidden')) {
             closeModal();
         }
     });
 
     // Listen for IndexedDB storage changes (cross-context)
-    MojiFuStorage.onChanged((key) => {
+    MojiFuStorage.onChanged(key => {
         if (key === 'savedStyles') {
             loadStyles();
         }
     });
 
-    chrome.runtime.onMessage.addListener((message) => {
-        if (message.type === 'FONT_DOWNLOAD_COMPLETE' || message.type === 'FONT_DOWNLOAD_FAILED' || message.type === 'STYLE_SAVED') {
+    chrome.runtime.onMessage.addListener(message => {
+        if (
+            message.type === 'FONT_DOWNLOAD_COMPLETE' ||
+            message.type === 'FONT_DOWNLOAD_FAILED' ||
+            message.type === 'STYLE_SAVED'
+        ) {
             loadStyles();
         }
     });

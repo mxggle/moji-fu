@@ -16,43 +16,92 @@ const MojiFuStorage = (function () {
     let _changeListeners = [];
     let _initDone = false;
 
-    // ─── Message-based storage (works from any context) ────────
+    const MAX_RETRIES = 3;
+    const BASE_RETRY_DELAY = 100;
 
-    function sendStorageMessage(action, data) {
+    function sendStorageMessage(action, data, retries = 0) {
         return new Promise((resolve, reject) => {
-            chrome.runtime.sendMessage(
-                { type: 'MOJIFU_STORAGE', action, ...data },
-                (response) => {
-                    if (chrome.runtime.lastError) {
-                        reject(new Error(chrome.runtime.lastError.message));
-                        return;
+            try {
+                chrome.runtime.sendMessage(
+                    { type: 'MOJIFU_STORAGE', action, ...data },
+                    response => {
+                        if (chrome.runtime.lastError) {
+                            const error = new Error(chrome.runtime.lastError.message);
+                            if (retries < MAX_RETRIES) {
+                                const delayMs = BASE_RETRY_DELAY * Math.pow(2, retries);
+                                console.warn(
+                                    `MojiFuStorage: Retry ${retries + 1}/${MAX_RETRIES} after error: ${error.message}`
+                                );
+                                setTimeout(() => {
+                                    sendStorageMessage(action, data, retries + 1)
+                                        .then(resolve)
+                                        .catch(reject);
+                                }, delayMs);
+                                return;
+                            }
+                            reject(error);
+                            return;
+                        }
+                        if (response && response.error) {
+                            reject(new Error(response.error));
+                            return;
+                        }
+                        resolve(response ? response.result : undefined);
                     }
-                    if (response && response.error) {
-                        reject(new Error(response.error));
-                        return;
-                    }
-                    resolve(response ? response.result : undefined);
+                );
+            } catch (e) {
+                if (retries < MAX_RETRIES) {
+                    const delayMs = BASE_RETRY_DELAY * Math.pow(2, retries);
+                    console.warn(
+                        `MojiFuStorage: Retry ${retries + 1}/${MAX_RETRIES} after exception: ${e.message}`
+                    );
+                    setTimeout(() => {
+                        sendStorageMessage(action, data, retries + 1)
+                            .then(resolve)
+                            .catch(reject);
+                    }, delayMs);
+                } else {
+                    reject(e);
                 }
-            );
+            }
         });
     }
 
     // ─── Public API ────────────────────────────────
+
+    let _currentVersion = 0;
 
     /**
      * Get savedStyles from IndexedDB (via background).
      * Returns a Promise that resolves with the styles array (never null).
      */
     function getSavedStyles() {
-        return sendStorageMessage('get');
+        return sendStorageMessage('get').then(result => {
+            if (result && typeof result === 'object' && 'data' in result) {
+                _currentVersion = result.version;
+                return result.data || [];
+            }
+            _currentVersion = result.version || 0;
+            return result || [];
+        });
     }
 
     /**
      * Set savedStyles in IndexedDB (via background) and notify listeners.
      * Returns a Promise.
      */
-    function setSavedStyles(styles) {
-        return sendStorageMessage('set', { styles });
+    function setSavedStyles(styles, useCurrentVersion = true) {
+        const version = useCurrentVersion ? _currentVersion : undefined;
+        return sendStorageMessage('set', { styles, version }).then(result => {
+            if (result) {
+                _currentVersion++;
+            }
+            return result;
+        });
+    }
+
+    function getCurrentVersion() {
+        return _currentVersion;
     }
 
     /**
@@ -68,11 +117,13 @@ const MojiFuStorage = (function () {
      * Returns a Promise that resolves when ready.
      */
     function init() {
-        if (_initDone) return Promise.resolve();
+        if (_initDone) {
+            return Promise.resolve();
+        }
         _initDone = true;
 
         // Listen for change broadcasts from background
-        chrome.runtime.onMessage.addListener((message) => {
+        chrome.runtime.onMessage.addListener(message => {
             if (message.type === 'MOJIFU_STORAGE_CHANGED') {
                 // Re-read from background and notify local listeners
                 getSavedStyles().then(styles => {
@@ -89,7 +140,10 @@ const MojiFuStorage = (function () {
 
         // Trigger migration in background (no-op if already done)
         return sendStorageMessage('migrate').catch(err => {
-            console.warn('MojiFuStorage: migration message failed (background may not be ready yet)', err);
+            console.warn(
+                'MojiFuStorage: migration message failed (background may not be ready yet)',
+                err
+            );
         });
     }
 
@@ -97,7 +151,8 @@ const MojiFuStorage = (function () {
         init,
         getSavedStyles,
         setSavedStyles,
-        onChanged
+        onChanged,
+        getCurrentVersion
     };
 })();
 

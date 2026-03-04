@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-02-28
+
+### 🚀 Major Improvements
+- **Auto Dev Mode Detection**: DEV_MODE now automatically detects if the dev server is available, no manual configuration needed
+- **Optimistic Locking**: Added version-based concurrency control for IndexedDB operations to prevent race conditions during concurrent modifications
+- **Retry Logic with Exponential Backoff**: All storage operations now automatically retry up to 3 times with exponential backoff when the background service worker is unavailable
+- **Event Listener Cleanup**: Added proper cleanup functions for content script event listeners to prevent memory leaks
+
+### 🐛 Bug Fixes
+- **Delete Race Condition**: Fixed issue where simultaneous delete operations could resurrect deleted items
+- **Memory Leaks**: Fixed event listeners not being cleaned up when content scripts re-inject
+
+### 🔧 Code Quality
+- **Magic Numbers**: Extracted all magic numbers to named constants for better maintainability
+- **Type Definitions**: Added comprehensive JSDoc type definitions in `types.js` for all complex data structures
+- **ESLint + Prettier**: Added linting and formatting configuration with automated scripts
+- **Improved Release Script**: More robust release script with better error handling, version detection, and release notes extraction
+
 ## [1.3.0] - 2026-02-18
 
 ### ✨ New Features
