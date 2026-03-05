@@ -428,14 +428,26 @@
         const cssRules = [];
 
         // 1. Identity properties apply to container and ALL descendants
+        //    But exclude <a> tags from color/textShadow so links keep their native appearance
         if (identityDecls.length > 0) {
             const decls = identityDecls.join('; ');
             cssRules.push(`${selector} { ${decls}; }`);
-            cssRules.push(`${selector} * { ${decls}; }`);
+
+            // Split: font-family applies to all descendants, but color/textShadow skip links
+            const linkSafeDecls = identityDecls.filter(d => !d.startsWith('color:') && !d.startsWith('text-shadow:'));
+            const linkUnsafeDecls = identityDecls.filter(d => d.startsWith('color:') || d.startsWith('text-shadow:'));
+
+            if (linkSafeDecls.length > 0) {
+                cssRules.push(`${selector} * { ${linkSafeDecls.join('; ')}; }`);
+            }
+            if (linkUnsafeDecls.length > 0) {
+                cssRules.push(`${selector} *:not(a) { ${linkUnsafeDecls.join('; ')}; }`);
+            }
         }
 
         // 2. Typography properties apply to container and specific body text elements
         // BUT we intentionally EXCLUDE headings (h1-h6) from these generic sizes
+        // AND we exclude text-decoration from <a> tags so links keep underlines
         if (typographyDecls.length > 0) {
             const decls = typographyDecls.join('; ');
             const bodySelectors = [
@@ -443,16 +455,22 @@
                 `${selector} p`,
                 `${selector} span`,
                 `${selector} li`,
-                `${selector} a`,
                 `${selector} div`,
                 `${selector} td`,
                 `${selector} blockquote`,
                 `${selector} pre`,
                 `${selector} code`
                 // Note: h1-h6 are excluded so they keep their own size/weight
+                // Note: <a> handled separately to preserve link styling
             ].join(',\n');
 
             cssRules.push(`${bodySelectors} { ${decls}; }`);
+
+            // For <a> tags: apply typography but NOT text-decoration
+            const linkSafeTypography = typographyDecls.filter(d => !d.startsWith('text-decoration:'));
+            if (linkSafeTypography.length > 0) {
+                cssRules.push(`${selector} a { ${linkSafeTypography.join('; ')}; }`);
+            }
         }
 
         return cssRules.join('\n');
@@ -523,14 +541,24 @@
         }
 
         // 2. Apply identity properties (font-family, color) to ALL descendants
+        //    But exclude <a> tags from color/textShadow so links keep their native appearance
         if (Object.keys(baseIdentityProps).length > 0) {
-            const identityDecls = Object.entries(baseIdentityProps)
-                .map(([prop, value]) => `${PROP_MAP[prop]}: ${value} !important`)
-                .join('; ');
+            const allDecls = Object.entries(baseIdentityProps)
+                .map(([prop, value]) => `${PROP_MAP[prop]}: ${value} !important`);
 
-            // Apply to container and all descendants
-            rules.push(`${baseSelector} { ${identityDecls}; }`);
-            rules.push(`${baseSelector} * { ${identityDecls}; }`);
+            // Apply to container
+            rules.push(`${baseSelector} { ${allDecls.join('; ')}; }`);
+
+            // Split: font-family applies to all descendants, but color/textShadow skip links
+            const linkSafeDecls = allDecls.filter(d => !d.startsWith('color:') && !d.startsWith('text-shadow:'));
+            const linkUnsafeDecls = allDecls.filter(d => d.startsWith('color:') || d.startsWith('text-shadow:'));
+
+            if (linkSafeDecls.length > 0) {
+                rules.push(`${baseSelector} * { ${linkSafeDecls.join('; ')}; }`);
+            }
+            if (linkUnsafeDecls.length > 0) {
+                rules.push(`${baseSelector} *:not(a) { ${linkUnsafeDecls.join('; ')}; }`);
+            }
         }
 
         // 3. Apply specific styles for each captured element type
@@ -623,8 +651,11 @@
                     }
                 }
 
-                // Apply to inline elements within the container
-                rules.push(`${baseSelector} a { ${decls}; }`);
+                // Apply to links: typography but NOT text-decoration (preserve link underlines)
+                const linkSafeDecls = pTypographyDecls.filter(d => !d.startsWith('text-decoration:'));
+                if (linkSafeDecls.length > 0) {
+                    rules.push(`${baseSelector} a { ${linkSafeDecls.join('; ')}; }`);
+                }
             }
         }
 
